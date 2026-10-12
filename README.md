@@ -11,7 +11,7 @@ import instead of re-proving, and tools that keep laws honest.
 
 | Part | What | Status |
 |---|---|---|
-| [`bend-mathlib`](packages/bend-mathlib) | 445 published lemmas (+299 generated `_sym` twins) about `Nat`, `Bool`, `List`, `String`, `Maybe`, equality — generic, proved, zero `@unsafe` | **0.7.2.0 on BendHub** |
+| [`bend-mathlib`](packages/bend-mathlib) | 445 published lemmas (+299 generated `_sym` twins) about `Nat`, `Bool`, `List`, `String`, `Maybe`, equality — generic, proved, zero `@unsafe` | **0.7.3.0 on BendHub** |
 | [`@bendlib/reader`](tools/reader) | Reads Bend source with the official parser of your installed compiler version | working |
 | [`lawcheck`](tools/lawcheck) | Finds counterexamples to laws before you try to prove them, and shrinks them; mutation mode shows how well the laws pin each def | **0.3.2**, binaries for Linux and macOS |
 | [Bend Docs](https://bendlib.github.io/bendlib/) | API docs, checker status and law-shape search for every BendHub package | **live**, rebuilt on a schedule (the footer shows the build time) |
@@ -21,8 +21,8 @@ import instead of re-proving, and tools that keep laws honest.
 ![86 lines by hand vs two imports and four rewrites](examples/demo/demo.gif)
 
 ```python
-import bend-mathlib@0.7.2.0/nat.bend as MNat
-import bend-mathlib@0.7.2.0/list.bend as MList
+import bend-mathlib@0.7.3.0/nat.bend as MNat
+import bend-mathlib@0.7.3.0/list.bend as MList
 
 law my_rev:
   for xs: List<&2, U32>
@@ -46,7 +46,7 @@ claude plugin install bend-mathlib@bendlib
 (or `/plugin marketplace add bendlib/bendlib` inside Claude Code). Other agents: copy
 [plugins/bend-mathlib/skills/bend-mathlib](plugins/bend-mathlib/skills/bend-mathlib/SKILL.md) into
 their skills directory.
-By hash (content-pinned): `import 0x449abff091641d732d7b9f0780df40ae/nat.bend as MNat`.
+By hash (content-pinned): `import 0xf8a2f05bbfb67041ce3d1eaece892a1a/nat.bend as MNat`.
 
 ## Check a law before you prove it
 
@@ -79,11 +79,12 @@ changes your laws fail to notice. Details: [tools/lawcheck](tools/lawcheck).
   hint line) on the pinned compiler.
 - **Checked by the proven kernel.** CI also runs `bend --verdict`, which re-checks every proof in
   BendTT, the kernel whose soundness is proved in Lean: `nat`, `list`, `bool`, `string`, `maybe`,
-  `equal`, `perm` and the kernel package pass. `algebra` and `order` wait on `--verdict`'s model
-  search, which picks a model for each `~` constant of a law in turn, so constants that only fit
-  together get none ([diagnosis](https://github.com/bendlang/bend/pull/1263), related to
-  [bendlang/bend#1182](https://github.com/bendlang/bend/issues/1182)); `sort` also needs template
-  arguments that depend on a run-time value, which BendTT cannot express yet.
+  `equal`, `perm` and the kernel package pass. `algebra`, `order` and `sort` wait on `--verdict`'s
+  model search, which picks a model for each `~` constant of a law in turn, so constants that only
+  fit together get none ([diagnosis](https://github.com/bendlang/bend/pull/1263), related to
+  [bendlang/bend#1182](https://github.com/bendlang/bend/issues/1182)); with that search fixed, every
+  module passes. Until then a file checked with `--verdict` cannot import `algebra`, `order`,
+  `sort` or `all`: `--verdict` rejects a file when any def of a module it imports is out of scope.
 - **Built for AI provers too.** Mathlib-standard names, one-line statements, generated
   `_sym` twins for the rewrite direction that simplifies.
 
@@ -121,7 +122,7 @@ for m in $(find packages/bend-mathlib -name '*.bend' | sort); do bun tools/mathl
 bun tools/mathlib/lint.ts packages/bend-mathlib --erasure
 bun tools/mathlib/twins.ts packages/bend-mathlib --check
 bun tools/mathlib/lock.ts packages/bend-mathlib --check
-bun tools/mathlib/index.ts packages/bend-mathlib bend-mathlib 0.7.2.0 --check
+bun tools/mathlib/index.ts packages/bend-mathlib bend-mathlib 0.7.3.0 --check
 ```
 
 Published statements never change: a fix gets a new name (`PLAN.md` §3.1 rule 2). Full procedure and

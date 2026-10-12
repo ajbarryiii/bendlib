@@ -1,7 +1,7 @@
 {
   "name": "bend-mathlib",
   "description": "Prove Bend 2 laws with bend-mathlib's machine-checked lemmas instead of re-proving them: find the lemma, import it, rewrite with it, and lawcheck a statement before proving it.",
-  "version": "0.7.2",
+  "version": "0.7.3",
   "author": { "name": "bendlib", "url": "https://github.com/bendlib" },
   "homepage": "https://bendlib.github.io/bendlib/",
   "repository": "https://github.com/bendlib/bendlib",

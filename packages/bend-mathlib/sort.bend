@@ -79,18 +79,26 @@ def isort_by_sorted(~A: Data, ~le: A -> A -> Bool, ~le_total: @x: A -> @y: A -> 
 def isort_by_sorted_nat(+xs: List<&2, Nat>) -> MList.sorted_by(~Nat, ~Nat.is_le, MPerm.isort_by(~Nat, ~Nat.is_le, xs)):
   isort_by_sorted(~Nat, ~Nat.is_le, ~internal_le_flip_nat, xs)
 
+# A recursion, not List.all with a lambda over lo, which --verdict cannot translate (PLAN F38).
+def internal_all_ge(~A: Data, ~le: A -> A -> Bool, +lo: A, xs: List<&2, A>) -> Bool:
+  match xs:
+    case Nil{}:
+      True{}
+    case h <> t:
+      Bool.and(le(lo, h), internal_all_ge(~A, ~le, lo, t))
+
 def internal_least(~A: Data, ~le: A -> A -> Bool, +lo: A, +xs: List<&2, A>) -> Data:
-  {List.all(~&2, ~A, ~(y => le(lo, y)), xs) == True{} : Bool}
+  {internal_all_ge(~A, ~le, lo, xs) == True{} : Bool}
 
 def internal_least_intro(~A: Data, ~le: A -> A -> Bool, +lo: A, +h: A, +t: List<&2, A>, hh: {le(lo, h) == True{} : Bool}, ht: internal_least(~A, ~le, lo, t)) -> internal_least(~A, ~le, lo, h <> t):
-  %Equal.sym(Bool, le(lo, h), True{}, hh) : {Bool.and(_, List.all(~&2, ~A, ~(y => le(lo, y)), t)) == True{} : Bool}
+  %Equal.sym(Bool, le(lo, h), True{}, hh) : {Bool.and(_, internal_all_ge(~A, ~le, lo, t)) == True{} : Bool}
   ht
 
 def internal_least_cons_le(~A: Data, ~le: A -> A -> Bool, +lo: A, +h: A, +t: List<&2, A>, hh: internal_least(~A, ~le, lo, h <> t)) -> {le(lo, h) == True{} : Bool}:
-  MList.internal_and_left(le(lo, h), List.all(~&2, ~A, ~(y => le(lo, y)), t), hh)
+  MList.internal_and_left(le(lo, h), internal_all_ge(~A, ~le, lo, t), hh)
 
 def internal_least_cons_tail(~A: Data, ~le: A -> A -> Bool, +lo: A, +h: A, +t: List<&2, A>, hh: internal_least(~A, ~le, lo, h <> t)) -> internal_least(~A, ~le, lo, t):
-  MList.internal_and_right(le(lo, h), List.all(~&2, ~A, ~(y => le(lo, y)), t), hh)
+  MList.internal_and_right(le(lo, h), internal_all_ge(~A, ~le, lo, t), hh)
 
 def internal_least_trans(~A: Data, ~le: A -> A -> Bool, ~le_trans: @x: A -> @y: A -> @z: A -> {le(x, y) == True{} : Bool} -> {le(y, z) == True{} : Bool} -> {le(x, z) == True{} : Bool}, +a: A, +b: A, +xs: List<&2, A>, +hab: {le(a, b) == True{} : Bool}, +hb: internal_least(~A, ~le, b, xs)) -> internal_least(~A, ~le, a, xs):
   match xs:

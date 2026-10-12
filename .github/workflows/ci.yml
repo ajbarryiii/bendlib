@@ -141,11 +141,13 @@ jobs:
             out=$(verdict "$f") && [ "$out" = "ALL PROOFS CHECK" ] || { echo "$f: $out"; exit 1; }
             echo "ok $f"
           done
-          # algebra, order: --verdict picks each ~ constant's model in turn, so constants that only fit together get none (bendlang/bend#1263, #1182);
-          # sort, all: that, plus template arguments that depend on a run-time value, which BendTT cannot express yet
+          # algebra, order, sort, all: --verdict picks each ~ constant's model in turn, so constants that only fit
+          # together get none (bendlang/bend#1263, #1182); any other out-of-scope reason is ours to fix (PLAN F38)
           for f in packages/bend-mathlib/{algebra,order,sort,all}.bend; do
             out=$(verdict "$f") && { echo "$f now passes --verdict: move it to the list above"; exit 1; }
             echo "$out" | grep -q "mismatch between the TypeScript implementation" || { echo "$f: $out"; exit 1; }
+            other=$(bun tools/mathlib/devlib.ts run -- "$HOME/.bend/bin/bend" "$f" -o "${RUNNER_TEMP:-/tmp}/verdict.bendtt" 2>&1 | grep '^- ' | grep -v ': no model for ' || true)
+            [ -z "$other" ] || { echo "$f is out of scope for a reason other than #1182:"; echo "$other"; exit 1; }
             echo "blocked upstream $f"
           done
 

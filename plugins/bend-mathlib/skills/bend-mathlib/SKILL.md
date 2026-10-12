@@ -14,15 +14,18 @@ never changes one you use. Before you prove a basic fact (`add_comm`, `append_as
 ## Import
 
 ```python
-import bend-mathlib@0.7.2.0/nat.bend as MNat
-import bend-mathlib@0.7.2.0/list.bend as MList
+import bend-mathlib@0.7.3.0/nat.bend as MNat
+import bend-mathlib@0.7.3.0/list.bend as MList
 ```
 
 Modules: `nat`, `bool`, `list`, `string`, `maybe`, `equal`, `order`, `algebra` (laws), `perm`
 (permutations, `insert_by`/`isort_by`/`merge_by`/`sort_by`) and `sort` (those sorts return sorted
 lists).
+If the project checks with `bend --verdict`, import only `nat`, `bool`, `list`, `string`, `maybe`,
+`equal` and `perm`: `--verdict` rejects a file when any def of an imported module is out of the
+kernel's scope, which `algebra`, `order`, `sort` and `all` are until upstream fixes bendlang/bend#1182.
 Pin by content hash if you want bytes that can never change:
-`import 0x449abff091641d732d7b9f0780df40ae/nat.bend as MNat`.
+`import 0xf8a2f05bbfb67041ce3d1eaece892a1a/nat.bend as MNat`.
 
 ## Find a lemma
 
@@ -57,8 +60,8 @@ its left side, at the spot marked `_`. Use the `_sym` twin to rewrite the other 
 
 ```python
 import Base
-import bend-mathlib@0.7.2.0/nat.bend as MNat
-import bend-mathlib@0.7.2.0/list.bend as MList
+import bend-mathlib@0.7.3.0/nat.bend as MNat
+import bend-mathlib@0.7.3.0/list.bend as MList
 
 law rev_len:
   for +xs: List<&2, U32>

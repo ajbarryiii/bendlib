@@ -8,7 +8,7 @@ side into the compound one and `name_sym` simplifies the compound side.
 ## algebra
 
 ```python
-import bend-mathlib@0.7.2.0/algebra.bend as MAlgebra
+import bend-mathlib@0.7.3.0/algebra.bend as MAlgebra
 ```
 
 | lemma | statement | meaning | since |
@@ -53,7 +53,7 @@ import bend-mathlib@0.7.2.0/algebra.bend as MAlgebra
 ## bool
 
 ```python
-import bend-mathlib@0.7.2.0/bool.bend as MBool
+import bend-mathlib@0.7.3.0/bool.bend as MBool
 ```
 
 | lemma | statement | meaning | since |
@@ -131,7 +131,7 @@ import bend-mathlib@0.7.2.0/bool.bend as MBool
 ## equal
 
 ```python
-import bend-mathlib@0.7.2.0/equal.bend as MEqual
+import bend-mathlib@0.7.3.0/equal.bend as MEqual
 ```
 
 | lemma | statement | meaning | since |
@@ -144,7 +144,7 @@ import bend-mathlib@0.7.2.0/equal.bend as MEqual
 ## list
 
 ```python
-import bend-mathlib@0.7.2.0/list.bend as MList
+import bend-mathlib@0.7.3.0/list.bend as MList
 ```
 
 | predicate | definition | since |
@@ -360,7 +360,7 @@ import bend-mathlib@0.7.2.0/list.bend as MList
 ## maybe
 
 ```python
-import bend-mathlib@0.7.2.0/maybe.bend as MMaybe
+import bend-mathlib@0.7.3.0/maybe.bend as MMaybe
 ```
 
 | lemma | statement | meaning | since |
@@ -399,7 +399,7 @@ import bend-mathlib@0.7.2.0/maybe.bend as MMaybe
 ## nat
 
 ```python
-import bend-mathlib@0.7.2.0/nat.bend as MNat
+import bend-mathlib@0.7.3.0/nat.bend as MNat
 ```
 
 | predicate | definition | since |
@@ -761,7 +761,7 @@ import bend-mathlib@0.7.2.0/nat.bend as MNat
 ## order
 
 ```python
-import bend-mathlib@0.7.2.0/order.bend as MOrder
+import bend-mathlib@0.7.3.0/order.bend as MOrder
 ```
 
 | lemma | statement | meaning | since |
@@ -776,7 +776,7 @@ import bend-mathlib@0.7.2.0/order.bend as MOrder
 ## string
 
 ```python
-import bend-mathlib@0.7.2.0/string.bend as MString
+import bend-mathlib@0.7.3.0/string.bend as MString
 ```
 
 | lemma | statement | meaning | since |
