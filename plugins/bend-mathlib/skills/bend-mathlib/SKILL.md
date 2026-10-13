@@ -56,7 +56,7 @@ MSort.sort_by_sorted_nat(xs)              # MList.sorted_by(~Nat, ~Nat.is_le, MP
 
 `%e : P` rewrites with the equation `e` inside the goal `P`: it replaces the right side of `e` with
 its left side, at the spot marked `_`. Use the `_sym` twin to rewrite the other way. A worked proof
-(checks on bend 2.0.35 and 2.0.36):
+(checks on bend 2.0.36 and 2.0.37):
 
 ```python
 import Base

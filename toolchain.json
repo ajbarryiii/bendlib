@@ -1,19 +1,19 @@
 {
   "bend": {
-    "version": "2.0.36",
-    "release": "https://github.com/bendlang/bend/releases/tag/v2.0.36",
+    "version": "2.0.37",
+    "release": "https://github.com/bendlang/bend/releases/tag/v2.0.37",
     "archives": {
-      "linux-x64":    { "file": "bend-2.0.36-linux-x64.tar.gz",    "sha256": "02089dc0eed0fd5fd6d73c74cc9cffcb2c6638dd3b02ae83f7b8cc57fbe381ba" },
-      "linux-arm64":  { "file": "bend-2.0.36-linux-arm64.tar.gz",  "sha256": "a14a311e39bad45f9669d4eab39d156b578c945f13a2b7bae20d9c23567a4664" },
-      "darwin-arm64": { "file": "bend-2.0.36-darwin-arm64.tar.gz", "sha256": "2876687ceb0aba836abc98b3f62c8fc9fb612d124ae2af6814d5ec937760878d" },
-      "darwin-x64":   { "file": "bend-2.0.36-darwin-x64.tar.gz",   "sha256": "925bb306c60260e1cdde56c2b8e4ba0e1eb4cbc88a76372cc0bb389a172dccdf" }
+      "linux-x64":    { "file": "bend-2.0.37-linux-x64.tar.gz",    "sha256": "84c32465a39bc9ac315eade23f470cb8db03153dc860f89564fcfec153c3e445" },
+      "linux-arm64":  { "file": "bend-2.0.37-linux-arm64.tar.gz",  "sha256": "b65d452e5c68a4c486e353220d4298ba5d76f535db47109a7d76ffdf72efafb1" },
+      "darwin-arm64": { "file": "bend-2.0.37-darwin-arm64.tar.gz", "sha256": "846d25ccf0c12d5d1e5e648c0b3ba4c8397fdb852812ac00ef8135998f8e194b" },
+      "darwin-x64":   { "file": "bend-2.0.37-darwin-x64.tar.gz",   "sha256": "93eea3f54b7b91f28ea15a1b9f2d825afa58c1fcd417c11024a62f8c3506b813" }
     },
     "source": {
-      "commit": "ae1101ca7d15364f9274fa6b1367d175884a7da7",
+      "commit": "4ff8545f19b09b7d2b8ca2303668100eac8efd66",
       "files": {
-        "bend2/bend.ts":  "1d133151652b597a1a035c77c172475e6de096da37f3b9e3adc23c2f75bdfe49",
-        "bend2/main.ts":  "c07379114c706310a3838af100d47cf41ea6ce347c72a7e8eefcd55645e0d0c3",
-        "bend2/base.bend": "99ac43f2b2bb3e3f39acdcedcecbbd3cb44749ce13969c827d6973fa66f7facf"
+        "bend2/bend.ts":  "6c1df3eb304fe085070aa4797928f70243b80d4635389e3d5d8a49fdfbb3051e",
+        "bend2/main.ts":  "38f77e7f1c2b0239cd8ed4a6baad90439c1d2610b2014573590ec7cf6ad04497",
+        "bend2/base.bend": "3238272964daa05438a8a99311008802fd495963ac78dbbf51f6d5e6bdcee77c"
       }
     }
   }

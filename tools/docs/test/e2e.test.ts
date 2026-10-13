@@ -104,7 +104,7 @@ describe("four-package build from the live hub", () => {
   });
 
   test("the index claims checked statuses only when every file was checked", () => {
-    expect(read("index.html")).toContain("each package checked on bend 2.0.36");
+    expect(read("index.html")).toContain("each package checked on bend 2.0.37");
   });
 
   test("the index lists the four packages, named ones first, with statuses from the real checker", () => {
@@ -155,7 +155,7 @@ describe("four-package build from the live hub", () => {
     for (const f of ["index.html", "search.html", `pkg/${ANON}/format.bend.html`]) {
       const html = read(f);
       expect(html).toContain("Community docs for BendHub packages · not affiliated with Higher Order Company · source");
-      expect(html).toContain("on bend 2.0.36 only");
+      expect(html).toContain("on bend 2.0.37 only");
     }
   });
 });

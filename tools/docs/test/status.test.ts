@@ -1,5 +1,5 @@
 // Checker-output classification. The strings are verbatim outputs of
-// `bend <file> --check-only` on 2.0.36 (hub files or experiments named in each test).
+// `bend <file> --check-only` on 2.0.37 (hub files or experiments named in each test).
 
 import { describe, expect, test } from "bun:test";
 import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";

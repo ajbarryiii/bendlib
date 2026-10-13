@@ -69,7 +69,7 @@ bun tools/lawcheck/cli.ts mutate LAWS.bend --json          # machine output
 
 ```
 $ bun tools/lawcheck/cli.ts mutate tools/lawcheck/test/fixtures/mut_weak.bend
-lawcheck mutate 0.3.2 · tools/lawcheck/test/fixtures/mut_weak.bend (impl lib_ok.bend) · bend 2.0.36 · ≤50 instances/law
+lawcheck mutate 0.3.2 · tools/lawcheck/test/fixtures/mut_weak.bend (impl lib_ok.bend) · bend 2.0.37 · ≤50 instances/law
 size  1/4 valid mutants killed · 3 survived · 6 invalid
       survived  arm-copy  line 12  1n+size(r) → 0n
       survived  drop-succ  line 12  1n+size(r) → size(r)
@@ -95,4 +95,4 @@ For equation laws whose claim type is `Nat`, `U32`, `Bool`, or `List<Nat>`/`List
 - The raw-text display back-map carries no filesystem-path entry for a hub module, because the generated batch imports a hub module by its canonical `0x<hash>/…` name, never by path: `bend --check-only` and the native build print that canonical name, which the same display pass already translates to the root's alias. A hub module the root did not import directly keeps its canonical `0x…` name (there is no root alias for it); a hub filesystem path is never printed. The one exception is a hub module that fails to parse or load: the loader reports its resolved path, exactly as it does for a local import, and that message is built before any alias map exists.
 - A target directory is a typed load error (exit 2), never a raw stack. A target path containing whitespace is copied into the batch temp directory under a safe basename (bend `import` lines are unquoted) with its local imports rewritten to absolute realpaths; a symlink to such a path works the same way.
 - Batch files are left in `$TMPDIR/lawcheck-*` (the path is printed) and are never deleted.
-- lawcheck is tested only on bend 2.0.36. bend 2.0.28+ imports only paths made of plain names (a letter or `_`, then letters/digits/`_`/`-`; PLAN F3), so a target under a directory such as `.cache` or macOS's `$TMPDIR` is copied into the batch temp directory — with the local files it imports, relative layout preserved — and checked there, and reported locations are mapped back to the original path. When that layout cannot be made plain (an import climbs above a non-plain component) the located error is kept. The scratch directory falls back to `/tmp` when `os.tmpdir()` is not itself plain (macOS).
+- lawcheck is tested only on bend 2.0.37. bend 2.0.28+ imports only paths made of plain names (a letter or `_`, then letters/digits/`_`/`-`; PLAN F3), so a target under a directory such as `.cache` or macOS's `$TMPDIR` is copied into the batch temp directory — with the local files it imports, relative layout preserved — and checked there, and reported locations are mapped back to the original path. When that layout cannot be made plain (an import climbs above a non-plain component) the located error is kept. The scratch directory falls back to `/tmp` when `os.tmpdir()` is not itself plain (macOS).
