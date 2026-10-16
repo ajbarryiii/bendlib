@@ -84,6 +84,33 @@ law le_total_of_not_le:
 def le_total_of_not_le(A, le, le_total, a, b, h):
   internal_or_of_false_right(le(a, b), le(b, a), le_total(a, b), h)
 
+# Nat calls of the laws above: --verdict takes a ~ constant's model from a call of its law (PLAN F38).
+def internal_nat_le_total(a: Nat, b: Nat) -> {Bool.or(Nat.is_le(a, b), Nat.is_le(b, a)) == True{} : Bool}:
+  match a b:
+    case 0n 0n:
+      {==}
+    case 0n 1n+q:
+      {==}
+    case 1n+p 0n:
+      {==}
+    case 1n+p 1n+q:
+      internal_nat_le_total(p, q)
+
+def internal_nat_le_trans3(+a: Nat, +b: Nat, +c: Nat, +d: Nat, ab: MNat.le(a, b), bc: MNat.le(b, c), cd: MNat.le(c, d)) -> MNat.le(a, d):
+  le_trans3(~Nat, ~Nat.is_le, ~MNat.le_trans, a, b, c, d, ab, bc, cd)
+
+def internal_nat_le_trans4(+a: Nat, +b: Nat, +c: Nat, +d: Nat, +e: Nat, ab: MNat.le(a, b), bc: MNat.le(b, c), cd: MNat.le(c, d), de: MNat.le(d, e)) -> MNat.le(a, e):
+  le_trans4(~Nat, ~Nat.is_le, ~MNat.le_trans, a, b, c, d, e, ab, bc, cd, de)
+
+def internal_nat_le_antisymm_eq(+a: Nat, +b: Nat, ab: MNat.le(a, b), ba: MNat.le(b, a)) -> {a == b : Nat}:
+  le_antisymm_eq(~Nat, ~Nat.is_le, ~MNat.le_antisymm, a, b, ab, ba)
+
+def internal_nat_le_total_true(+a: Nat, +b: Nat) -> {Bool.or(Nat.is_le(a, b), Nat.is_le(b, a)) == True{} : Bool}:
+  le_total_true(~Nat, ~Nat.is_le, ~internal_nat_le_total, a, b)
+
+def internal_nat_le_total_of_not_le(+a: Nat, +b: Nat, h: {Nat.is_le(a, b) == False{} : Bool}) -> MNat.le(b, a):
+  le_total_of_not_le(~Nat, ~Nat.is_le, ~internal_nat_le_total, a, b, h)
+
 # --- generated: _sym twins (tools/mathlib/twins.ts), do not edit ---
 
 # Totality as a Bool disjunction, reversed to rewrite toward the simple side.
