@@ -183,12 +183,26 @@ law cmp_refl:
 def cmp_refl(s):
   Equal.sym((String & String) & Cmp, ((s, s), EQ{}), String.cmp(s, s), internal_cmp_refl(s))
 
+# Proofs about String.eq unfold String.order only through this (PLAN F39).
+def internal_order_cmp(+a: String, +b: String) -> {Pair.snd(String & String, Cmp, String.cmp(a, b)) == String.order(a, b) : Cmp}:
+  {==}
+
+def internal_eq_true_cmp(+a: String, +b: String, h: {String.eq(a, b) == True{} : Bool}) -> {Cmp.is_eq(Pair.snd(String & String, Cmp, String.cmp(a, b))) == True{} : Bool}:
+  %Equal.sym(Cmp, Pair.snd(String & String, Cmp, String.cmp(a, b)), String.order(a, b), internal_order_cmp(a, b)) : {Cmp.is_eq(_) == True{} : Bool}
+  h
+
+def internal_cmp_true_eq(+a: String, +b: String, h: {Cmp.is_eq(Pair.snd(String & String, Cmp, String.cmp(a, b))) == True{} : Bool}) -> {String.eq(a, b) == True{} : Bool}:
+  %internal_order_cmp(a, b) : {Cmp.is_eq(_) == True{} : Bool}
+  h
+
 # Every string is equal to itself under String.eq.
 law eq_refl:
   for s: String
   {String.eq(s, s) == True{} : Bool}
 
 def eq_refl(s):
+  +s = s
+  %internal_order_cmp(s, s) : {Cmp.is_eq(_) == True{} : Bool}
   %internal_cmp_refl(s) : {Cmp.is_eq(Pair.snd(String & String, Cmp, _)) == True{} : Bool}
   {==}
 
@@ -258,7 +272,7 @@ def internal_is_eq_of(c: Cmp, +d: Cmp, e: {c == d : Cmp}, h: {Cmp.is_eq(c) == Tr
   %e : {Cmp.is_eq(_) == True{} : Bool}
   h
 
-def internal_step(+x: U32, +y: U32, +t1: String, +t2: String, c: Cmp, ec: {c == U32.cmp(x, y) : Cmp}, h: {Cmp.is_eq(Pair.snd(String & String, Cmp, String.cmp.fin(t1, t2, ((Chr{x}, Chr{y}), c)))) == True{} : Bool}, ih: {String.eq(t1, t2) == True{} : Bool} -> {t1 == t2 : String}) -> {SCon{Chr{x}, t1} == SCon{Chr{y}, t2} : String}:
+def internal_step(+x: U32, +y: U32, +t1: String, +t2: String, c: Cmp, ec: {c == U32.cmp(x, y) : Cmp}, h: {Cmp.is_eq(Pair.snd(String & String, Cmp, String.cmp.fin(t1, t2, ((Chr{x}, Chr{y}), c)))) == True{} : Bool}, ih: {Cmp.is_eq(Pair.snd(String & String, Cmp, String.cmp(t1, t2))) == True{} : Bool} -> {t1 == t2 : String}) -> {SCon{Chr{x}, t1} == SCon{Chr{y}, t2} : String}:
   match c:
     case LT{}:
       Empty.absurd({SCon{Chr{x}, t1} == SCon{Chr{y}, t2} : String}, internal_false_ne_true(h))
@@ -266,7 +280,7 @@ def internal_step(+x: U32, +y: U32, +t1: String, +t2: String, c: Cmp, ec: {c == 
       Empty.absurd({SCon{Chr{x}, t1} == SCon{Chr{y}, t2} : String}, internal_false_ne_true(h))
     case EQ{}:
       %u32_eq_of_is_eq(x, y, internal_is_eq_of(EQ{}, U32.cmp(x, y), ec, {==})) : {SCon{Chr{x}, t1} == SCon{Chr{_}, t2} : String}
-      %ih(Equal.trans(Bool, String.eq(t1, t2), Cmp.is_eq(Pair.snd(String & String, Cmp, String.cmp.rec(Chr{x}, Chr{y}, String.cmp(t1, t2)))), True{}, Equal.sym(Bool, Cmp.is_eq(Pair.snd(String & String, Cmp, String.cmp.rec(Chr{x}, Chr{y}, String.cmp(t1, t2)))), String.eq(t1, t2), internal_rec_is_eq(Chr{x}, Chr{y}, String.cmp(t1, t2))), h)) : {SCon{Chr{x}, t1} == SCon{Chr{x}, _} : String}
+      %ih(Equal.trans(Bool, Cmp.is_eq(Pair.snd(String & String, Cmp, String.cmp(t1, t2))), Cmp.is_eq(Pair.snd(String & String, Cmp, String.cmp.rec(Chr{x}, Chr{y}, String.cmp(t1, t2)))), True{}, Equal.sym(Bool, Cmp.is_eq(Pair.snd(String & String, Cmp, String.cmp.rec(Chr{x}, Chr{y}, String.cmp(t1, t2)))), Cmp.is_eq(Pair.snd(String & String, Cmp, String.cmp(t1, t2))), internal_rec_is_eq(Chr{x}, Chr{y}, String.cmp(t1, t2))), h)) : {SCon{Chr{x}, t1} == SCon{Chr{x}, _} : String}
       {==}
 
 # Two strings that String.eq calls equal are equal.
@@ -285,7 +299,7 @@ def eq_of_eq_true(a, b, h):
     case SCon{x, t} SNil{}:
       Empty.absurd({SCon{x, t} == SNil{} : String}, internal_false_ne_true(h))
     case SCon{Chr{+x}, +t1} SCon{Chr{+y}, +t2}:
-      internal_step(x, y, t1, t2, U32.cmp(x, y), {==}, h, hh => eq_of_eq_true(t1, t2, hh))
+      internal_step(x, y, t1, t2, U32.cmp(x, y), {==}, internal_eq_true_cmp(SCon{Chr{x}, t1}, SCon{Chr{y}, t2}, h), hh => eq_of_eq_true(t1, t2, internal_cmp_true_eq(t1, t2, hh)))
 
 def internal_length_reverse_go(s: String, -acc: String) -> {Nat.add(String.length(s), String.length(acc)) == String.length(String.reverse.go(s, acc)) : Nat}:
   match s:

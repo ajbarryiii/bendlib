@@ -528,6 +528,19 @@ law map_reverse:
 def map_reverse(A, B, f, xs):
   internal_map_reverse_go(~A, ~B, ~f, xs, Nil{})
 
+# Proofs about all, any and find unfold their cons case only through these (PLAN F39).
+def internal_all_cons(~a: Quant, ~A: Kind(a), ~f: A -> Bool, h: A, t: List<a, A>) -> {Bool.and(f(h), List.all(~a, ~A, ~f, t)) == List.all(~a, ~A, ~f, h <> t) : Bool}:
+  {==}
+
+def internal_any_cons(~a: Quant, ~A: Kind(a), ~f: A -> Bool, h: A, t: List<a, A>) -> {Bool.or(f(h), List.any(~a, ~A, ~f, t)) == List.any(~a, ~A, ~f, h <> t) : Bool}:
+  {==}
+
+def internal_find_cons(~A: Data, ~f: A -> Bool, +h: A, t: List<&2, A>) -> {List.find.put(A, h, List.find(~A, ~f, t), f(h)) == List.find(~A, ~f, h <> t) : Maybe<&2, A>}:
+  {==}
+
+def internal_contains_cons(~A: Data, ~eq: A -> A -> Bool, h: A, t: List<&2, A>, +x: A) -> {Bool.or(eq(h, x), List.contains(~A, ~eq, t, x)) == List.contains(~A, ~eq, h <> t, x) : Bool}:
+  {==}
+
 # All over an append is all over each part, joined by and.
 law all_append:
   for ~a: Quant
@@ -667,13 +680,15 @@ def internal_mem_append_left(+xs: List<&2, Nat>, +ys: List<&2, Nat>, +x: Nat, h:
     case Nil{}:
       Empty.absurd({List.contains(~Nat, ~Nat.is_eq, ys, x) == True{} : Bool}, MNat.internal_false_ne_true(h))
     case hd <> tl:
-      internal_or_of_or(Nat.is_eq(hd, x), List.contains(~Nat, ~Nat.is_eq, tl, x), List.contains(~Nat, ~Nat.is_eq, List.append(&2, Nat, tl, ys), x), h, internal_mem_append_left(tl, ys, x))
+      %internal_contains_cons(~Nat, ~Nat.is_eq, hd, List.append(&2, Nat, tl, ys), x) : {_ == True{} : Bool}
+      internal_or_of_or(Nat.is_eq(hd, x), List.contains(~Nat, ~Nat.is_eq, tl, x), List.contains(~Nat, ~Nat.is_eq, List.append(&2, Nat, tl, ys), x), Equal.trans(Bool, Bool.or(Nat.is_eq(hd, x), List.contains(~Nat, ~Nat.is_eq, tl, x)), List.contains(~Nat, ~Nat.is_eq, hd <> tl, x), True{}, internal_contains_cons(~Nat, ~Nat.is_eq, hd, tl, x), h), internal_mem_append_left(tl, ys, x))
 
 def internal_mem_append_right(+xs: List<&2, Nat>, +ys: List<&2, Nat>, +x: Nat, h: {List.contains(~Nat, ~Nat.is_eq, ys, x) == True{} : Bool}) -> {List.contains(~Nat, ~Nat.is_eq, List.append(&2, Nat, xs, ys), x) == True{} : Bool}:
   match xs:
     case Nil{}:
       h
     case hd <> tl:
+      %internal_contains_cons(~Nat, ~Nat.is_eq, hd, List.append(&2, Nat, tl, ys), x) : {_ == True{} : Bool}
       internal_or_of_right(Nat.is_eq(hd, x), List.contains(~Nat, ~Nat.is_eq, List.append(&2, Nat, tl, ys), x), internal_mem_append_right(tl, ys, x, h))
 
 # The head of a Nat list is a member of it (membership by Nat.is_eq).
@@ -743,6 +758,15 @@ law sorted_single:
 def sorted_single(x):
   {==}
 
+# The step of sorted_by, with a literal pair head so the kernel reduces the predicate (PLAN F39).
+def internal_sorted_cons_true(-x: Nat, -y: Nat, -z: List<&1, Nat & Nat>, e: {Nat.is_le(x, y) == True{} : Bool}) -> {List.all(~&1, ~(Nat & Nat), ~(p => Nat.is_le(Pair.fst(Nat, Nat, p), Pair.snd(Nat, Nat, p))), z) == List.all(~&1, ~(Nat & Nat), ~(p => Nat.is_le(Pair.fst(Nat, Nat, p), Pair.snd(Nat, Nat, p))), (x, y) <> z) : Bool}:
+  %Equal.sym(Bool, Nat.is_le(x, y), True{}, e) : {List.all(~&1, ~(Nat & Nat), ~(p => Nat.is_le(Pair.fst(Nat, Nat, p), Pair.snd(Nat, Nat, p))), z) == Bool.and(_, List.all(~&1, ~(Nat & Nat), ~(p => Nat.is_le(Pair.fst(Nat, Nat, p), Pair.snd(Nat, Nat, p))), z)) : Bool}
+  {==}
+
+def internal_sorted_cons_false(-x: Nat, -y: Nat, z: List<&1, Nat & Nat>, e: {Nat.is_le(x, y) == False{} : Bool}) -> {False{} == List.all(~&1, ~(Nat & Nat), ~(p => Nat.is_le(Pair.fst(Nat, Nat, p), Pair.snd(Nat, Nat, p))), (x, y) <> z) : Bool}:
+  %Equal.sym(Bool, Nat.is_le(x, y), False{}, e) : {False{} == Bool.and(_, List.all(~&1, ~(Nat & Nat), ~(p => Nat.is_le(Pair.fst(Nat, Nat, p), Pair.snd(Nat, Nat, p))), z)) : Bool}
+  {==}
+
 # A Nat list sorted by Nat.is_le stays sorted under a head that is <= the next element.
 law sorted_cons_cons_intro:
   for -x: Nat
@@ -753,8 +777,15 @@ law sorted_cons_cons_intro:
   sorted_by(~Nat, ~Nat.is_le, x <> y <> t)
 
 def sorted_cons_cons_intro(x, y, t, hxy, hyt):
-  %Equal.sym(Bool, Nat.is_le(x, y), True{}, hxy) : {Bool.and(_, List.all(~&1, ~(Nat & Nat), ~(p => Nat.is_le(Pair.fst(Nat, Nat, p), Pair.snd(Nat, Nat, p))), List.zip(&2, Nat, &2, Nat, y <> t, t))) == True{} : Bool}
+  %internal_sorted_cons_true(x, y, List.zip(&2, Nat, &2, Nat, y <> t, t), hxy) : {_ == True{} : Bool}
   hyt
+
+def internal_sorted_tail_step(-x: Nat, +y: Nat, +t: List<&2, Nat>, b: Bool, e: {Nat.is_le(x, y) == b : Bool}, h: sorted_by(~Nat, ~Nat.is_le, x <> y <> t)) -> sorted_by(~Nat, ~Nat.is_le, y <> t):
+  match b:
+    case True{}:
+      Equal.trans(Bool, List.all(~&1, ~(Nat & Nat), ~(p => Nat.is_le(Pair.fst(Nat, Nat, p), Pair.snd(Nat, Nat, p))), List.zip(&2, Nat, &2, Nat, y <> t, t)), List.all(~&1, ~(Nat & Nat), ~(p => Nat.is_le(Pair.fst(Nat, Nat, p), Pair.snd(Nat, Nat, p))), (x, y) <> List.zip(&2, Nat, &2, Nat, y <> t, t)), True{}, internal_sorted_cons_true(x, y, List.zip(&2, Nat, &2, Nat, y <> t, t), e), h)
+    case False{}:
+      Empty.absurd(sorted_by(~Nat, ~Nat.is_le, y <> t), MNat.internal_false_ne_true(Equal.trans(Bool, False{}, List.all(~&1, ~(Nat & Nat), ~(p => Nat.is_le(Pair.fst(Nat, Nat, p), Pair.snd(Nat, Nat, p))), (x, y) <> List.zip(&2, Nat, &2, Nat, y <> t, t)), True{}, internal_sorted_cons_false(x, y, List.zip(&2, Nat, &2, Nat, y <> t, t), e), h)))
 
 # The first two elements of a Nat list sorted by Nat.is_le are in order.
 law sorted_cons_cons_elim_le:
@@ -789,8 +820,9 @@ def sorted_tail(x, xs, h):
   match xs:
     case Nil{}:
       {==}
-    case y <> t:
-      internal_and_right(Nat.is_le(x, y), List.all(~&1, ~(Nat & Nat), ~(p => Nat.is_le(Pair.fst(Nat, Nat, p), Pair.snd(Nat, Nat, p))), List.zip(&2, Nat, &2, Nat, y <> t, t)), h)
+    case +y <> t:
+      +x = x
+      internal_sorted_tail_step(x, y, t, Nat.is_le(x, y), {==}, h)
 
 # Taking the length of the first part of an append gives the first part back.
 law take_left:
@@ -1158,12 +1190,12 @@ def filter_filter(A, p, q, xs):
       %filter_filter(~A, ~p, ~q, t) : {List.filter(~A, ~p, List.filter.put(A, h, List.filter(~A, ~q, t), q(h))) == List.filter.put(A, h, _, Bool.and(p(h), q(h))) : List<&2, A>}
       internal_filter_put_filter(~A, ~p, h, List.filter(~A, ~q, t), q(h))
 
-def internal_all_filter_put(~A: Data, ~q: A -> Bool, -h: A, r: List<&2, A>, b: Bool) -> {List.all(~&2, ~A, ~q, List.filter.put(A, h, r, b)) == Bool.and(Bool.or(Bool.not(b), q(h)), List.all(~&2, ~A, ~q, r)) : Bool}:
+def internal_all_filter_put(~A: Data, ~q: A -> Bool, +h: A, r: List<&2, A>, b: Bool) -> {List.all(~&2, ~A, ~q, List.filter.put(A, h, r, b)) == Bool.and(Bool.or(Bool.not(b), q(h)), List.all(~&2, ~A, ~q, r)) : Bool}:
   match b:
     case False{}:
       {==}
     case True{}:
-      {==}
+      Equal.sym(Bool, Bool.and(q(h), List.all(~&2, ~A, ~q, r)), List.all(~&2, ~A, ~q, h <> r), internal_all_cons(~&2, ~A, ~q, h, r))
 
 # All over a filter checks q only where p holds: all q (filter p xs) = all (not p or q) xs.
 law all_filter:
@@ -1179,15 +1211,16 @@ def all_filter(A, p, q, xs):
       {==}
     case +h <> t:
       +t = t
+      %internal_all_cons(~&2, ~A, ~(+x => Bool.or(Bool.not(p(x)), q(x))), h, t) : {List.all(~&2, ~A, ~q, List.filter.put(A, h, List.filter(~A, ~p, t), p(h))) == _ : Bool}
       %all_filter(~A, ~p, ~q, t) : {List.all(~&2, ~A, ~q, List.filter.put(A, h, List.filter(~A, ~p, t), p(h))) == Bool.and(Bool.or(Bool.not(p(h)), q(h)), _) : Bool}
       internal_all_filter_put(~A, ~q, h, List.filter(~A, ~p, t), p(h))
 
-def internal_any_filter_put(~A: Data, ~q: A -> Bool, -h: A, r: List<&2, A>, b: Bool) -> {List.any(~&2, ~A, ~q, List.filter.put(A, h, r, b)) == Bool.or(Bool.and(b, q(h)), List.any(~&2, ~A, ~q, r)) : Bool}:
+def internal_any_filter_put(~A: Data, ~q: A -> Bool, +h: A, r: List<&2, A>, b: Bool) -> {List.any(~&2, ~A, ~q, List.filter.put(A, h, r, b)) == Bool.or(Bool.and(b, q(h)), List.any(~&2, ~A, ~q, r)) : Bool}:
   match b:
     case False{}:
       {==}
     case True{}:
-      {==}
+      Equal.sym(Bool, Bool.or(q(h), List.any(~&2, ~A, ~q, r)), List.any(~&2, ~A, ~q, h <> r), internal_any_cons(~&2, ~A, ~q, h, r))
 
 # Any over a filter looks for q only where p holds: any q (filter p xs) = any (p and q) xs.
 law any_filter:
@@ -1203,8 +1236,26 @@ def any_filter(A, p, q, xs):
       {==}
     case +h <> t:
       +t = t
+      %internal_any_cons(~&2, ~A, ~(+x => Bool.and(p(x), q(x))), h, t) : {List.any(~&2, ~A, ~q, List.filter.put(A, h, List.filter(~A, ~p, t), p(h))) == _ : Bool}
       %any_filter(~A, ~p, ~q, t) : {List.any(~&2, ~A, ~q, List.filter.put(A, h, List.filter(~A, ~p, t), p(h))) == Bool.or(Bool.and(p(h), q(h)), _) : Bool}
       internal_any_filter_put(~A, ~q, h, List.filter(~A, ~p, t), p(h))
+
+# The proof of all_map unfolds List.all, so it lives here with the other unfolding lemmas (PLAN F39).
+def internal_all_map(~A: Type, ~B: Type, ~f: A -> B, ~p: B -> Bool, xs: List<A>) -> {List.all(~&1, ~B, ~p, List.map(~A, ~B, ~f, xs)) == List.all(~&1, ~A, ~(x => p(f(x))), xs) : Bool}:
+  match xs:
+    case Nil{}:
+      {==}
+    case h <> t:
+      %internal_all_map(~A, ~B, ~f, ~p, t) : {Bool.and(p(f(h)), List.all(~&1, ~B, ~p, List.map(~A, ~B, ~f, t))) == Bool.and(p(f(h)), _) : Bool}
+      {==}
+
+def internal_any_map(~A: Type, ~B: Type, ~f: A -> B, ~p: B -> Bool, xs: List<A>) -> {List.any(~&1, ~B, ~p, List.map(~A, ~B, ~f, xs)) == List.any(~&1, ~A, ~(x => p(f(x))), xs) : Bool}:
+  match xs:
+    case Nil{}:
+      {==}
+    case h <> t:
+      %internal_any_map(~A, ~B, ~f, ~p, t) : {Bool.or(p(f(h)), List.any(~&1, ~B, ~p, List.map(~A, ~B, ~f, t))) == Bool.or(p(f(h)), _) : Bool}
+      {==}
 
 # All over a map checks the composed predicate: all p (map f xs) = all (p . f) xs.
 law all_map:
@@ -1216,12 +1267,7 @@ law all_map:
   {List.all(~&1, ~B, ~p, List.map(~A, ~B, ~f, xs)) == List.all(~&1, ~A, ~(x => p(f(x))), xs) : Bool}
 
 def all_map(A, B, f, p, xs):
-  match xs:
-    case Nil{}:
-      {==}
-    case h <> t:
-      %all_map(~A, ~B, ~f, ~p, t) : {Bool.and(p(f(h)), List.all(~&1, ~B, ~p, List.map(~A, ~B, ~f, t))) == Bool.and(p(f(h)), _) : Bool}
-      {==}
+  internal_all_map(~A, ~B, ~f, ~p, xs)
 
 # Any over a map checks the composed predicate: any p (map f xs) = any (p . f) xs.
 law any_map:
@@ -1233,12 +1279,7 @@ law any_map:
   {List.any(~&1, ~B, ~p, List.map(~A, ~B, ~f, xs)) == List.any(~&1, ~A, ~(x => p(f(x))), xs) : Bool}
 
 def any_map(A, B, f, p, xs):
-  match xs:
-    case Nil{}:
-      {==}
-    case h <> t:
-      %any_map(~A, ~B, ~f, ~p, t) : {Bool.or(p(f(h)), List.any(~&1, ~B, ~p, List.map(~A, ~B, ~f, t))) == Bool.or(p(f(h)), _) : Bool}
-      {==}
+  internal_any_map(~A, ~B, ~f, ~p, xs)
 
 def internal_all_reverse_go(~a: Quant, ~A: Kind(a), ~f: A -> Bool, xs: List<a, A>, -acc: List<a, A>, c: Bool, e: {List.all(~a, ~A, ~f, acc) == c : Bool}) -> {List.all(~a, ~A, ~f, List.reverse.go(a, A, xs, acc)) == Bool.and(c, List.all(~a, ~A, ~f, xs)) : Bool}:
   match xs c:
