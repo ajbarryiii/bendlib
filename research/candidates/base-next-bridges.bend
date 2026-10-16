@@ -70,13 +70,13 @@ def internal_contains_go(~A: Data, ~eq: A -> A -> Bool, t: List<&2, A>, +x: A, b
 def internal_contains_cons(~A: Data, ~eq: A -> A -> Bool, h: A, t: List<&2, A>, +x: A) -> {Bool.or(eq(h, x), List.contains(~A, ~eq, t, x)) == List.contains(~A, ~eq, h <> t, x) : Bool}:
   internal_contains_go(~A, ~eq, t, x, eq(h, x))
 
-def internal_sorted_cons_true(-x: Nat, -y: Nat, -z: List<&1, Nat & Nat>, e: {Nat.is_le(x, y) == True{} : Bool}) -> {List.all(~&1, ~(Nat & Nat), ~(p => Nat.is_le(Pair.fst(Nat, Nat, p), Pair.snd(Nat, Nat, p))), z) == List.all(~&1, ~(Nat & Nat), ~(p => Nat.is_le(Pair.fst(Nat, Nat, p), Pair.snd(Nat, Nat, p))), (x, y) <> z) : Bool}:
-  %Equal.sym(Bool, Nat.is_le(x, y), True{}, e) : {List.all(~&1, ~(Nat & Nat), ~(p => Nat.is_le(Pair.fst(Nat, Nat, p), Pair.snd(Nat, Nat, p))), z) == List.all.go(~&1, ~(Nat & Nat), ~(p => Nat.is_le(Pair.fst(Nat, Nat, p), Pair.snd(Nat, Nat, p))), z, _) : Bool}
+def internal_sorted_cons_true(~A: Data, ~le: A -> A -> Bool, -x: A, -y: A, -z: List<&1, A & A>, e: {le(x, y) == True{} : Bool}) -> {List.all(~&1, ~(A & A), ~(p => le(Pair.fst(A, A, p), Pair.snd(A, A, p))), z) == List.all(~&1, ~(A & A), ~(p => le(Pair.fst(A, A, p), Pair.snd(A, A, p))), (x, y) <> z) : Bool}:
+  %Equal.sym(Bool, le(x, y), True{}, e) : {List.all(~&1, ~(A & A), ~(p => le(Pair.fst(A, A, p), Pair.snd(A, A, p))), z) == List.all.go(~&1, ~(A & A), ~(p => le(Pair.fst(A, A, p), Pair.snd(A, A, p))), z, _) : Bool}
   {==}
 
-def internal_sorted_cons_false(-x: Nat, -y: Nat, z: List<&1, Nat & Nat>, e: {Nat.is_le(x, y) == False{} : Bool}) -> {False{} == List.all(~&1, ~(Nat & Nat), ~(p => Nat.is_le(Pair.fst(Nat, Nat, p), Pair.snd(Nat, Nat, p))), (x, y) <> z) : Bool}:
-  %Equal.sym(Bool, Nat.is_le(x, y), False{}, e) : {False{} == List.all.go(~&1, ~(Nat & Nat), ~(p => Nat.is_le(Pair.fst(Nat, Nat, p), Pair.snd(Nat, Nat, p))), z, _) : Bool}
-  internal_all_go_false(~&1, ~(Nat & Nat), ~(p => Nat.is_le(Pair.fst(Nat, Nat, p), Pair.snd(Nat, Nat, p))), z)
+def internal_sorted_cons_false(~A: Data, ~le: A -> A -> Bool, -x: A, -y: A, z: List<&1, A & A>, e: {le(x, y) == False{} : Bool}) -> {False{} == List.all(~&1, ~(A & A), ~(p => le(Pair.fst(A, A, p), Pair.snd(A, A, p))), (x, y) <> z) : Bool}:
+  %Equal.sym(Bool, le(x, y), False{}, e) : {False{} == List.all.go(~&1, ~(A & A), ~(p => le(Pair.fst(A, A, p), Pair.snd(A, A, p))), z, _) : Bool}
+  internal_all_go_false(~&1, ~(A & A), ~(p => le(Pair.fst(A, A, p), Pair.snd(A, A, p))), z)
 
 def internal_all_map_go(~A: Type, ~B: Type, ~f: A -> B, ~p: B -> Bool, t: List<A>, b: Bool) -> {List.all.go(~&1, ~B, ~p, List.map(~A, ~B, ~f, t), b) == List.all.go(~&1, ~A, ~(x => p(f(x))), t, b) : Bool}:
   match t:
@@ -113,6 +113,42 @@ def internal_any_map_go(~A: Type, ~B: Type, ~f: A -> B, ~p: B -> Bool, t: List<A
 
 def internal_any_map(~A: Type, ~B: Type, ~f: A -> B, ~p: B -> Bool, xs: List<A>) -> {List.any(~&1, ~B, ~p, List.map(~A, ~B, ~f, xs)) == List.any(~&1, ~A, ~(x => p(f(x))), xs) : Bool}:
   internal_any_map_go(~A, ~B, ~f, ~p, xs, False{})
+
+def internal_all_not_any_go(~a: Quant, ~A: Kind(a), ~f: A -> Bool, t: List<a, A>, b: Bool) -> {List.all.go(~a, ~A, ~f, t, b) == Bool.not(List.any.go(~a, ~A, ~(x => Bool.not(f(x))), t, Bool.not(b))) : Bool}:
+  match t:
+    case Nil{}:
+      match b:
+        case False{}:
+          {==}
+        case True{}:
+          {==}
+    case h <> r:
+      match b:
+        case False{}:
+          {==}
+        case True{}:
+          internal_all_not_any_go(~a, ~A, ~f, r, f(h))
+
+def internal_all_eq_not_any_not(~a: Quant, ~A: Kind(a), ~f: A -> Bool, xs: List<a, A>) -> {List.all(~a, ~A, ~f, xs) == Bool.not(List.any(~a, ~A, ~(x => Bool.not(f(x))), xs)) : Bool}:
+  internal_all_not_any_go(~a, ~A, ~f, xs, True{})
+
+def internal_any_not_all_go(~a: Quant, ~A: Kind(a), ~f: A -> Bool, t: List<a, A>, b: Bool) -> {List.any.go(~a, ~A, ~f, t, b) == Bool.not(List.all.go(~a, ~A, ~(x => Bool.not(f(x))), t, Bool.not(b))) : Bool}:
+  match t:
+    case Nil{}:
+      match b:
+        case False{}:
+          {==}
+        case True{}:
+          {==}
+    case h <> r:
+      match b:
+        case False{}:
+          internal_any_not_all_go(~a, ~A, ~f, r, f(h))
+        case True{}:
+          {==}
+
+def internal_any_eq_not_all_not(~a: Quant, ~A: Kind(a), ~f: A -> Bool, xs: List<a, A>) -> {List.any(~a, ~A, ~f, xs) == Bool.not(List.all(~a, ~A, ~(x => Bool.not(f(x))), xs)) : Bool}:
+  internal_any_not_all_go(~a, ~A, ~f, xs, False{})
 
 def internal_order_go_lt(a: String, b: String) -> {String.order.go(a, b, LT{}) == LT{} : Cmp}:
   match a b:

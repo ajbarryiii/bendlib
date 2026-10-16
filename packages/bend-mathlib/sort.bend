@@ -8,14 +8,28 @@ def internal_sorted_single(~A: Data, ~le: A -> A -> Bool, +x: A) -> MList.sorted
   {==}
 
 def internal_sorted_cons_cons_intro(~A: Data, ~le: A -> A -> Bool, +x: A, +y: A, +t: List<&2, A>, hxy: {le(x, y) == True{} : Bool}, hyt: MList.sorted_by(~A, ~le, y <> t)) -> MList.sorted_by(~A, ~le, x <> y <> t):
-  %Equal.sym(Bool, le(x, y), True{}, hxy) : {Bool.and(_, List.all(~&1, ~(A & A), ~(p => le(Pair.fst(A, A, p), Pair.snd(A, A, p))), List.zip(&2, A, &2, A, y <> t, t))) == True{} : Bool}
+  %MList.internal_sorted_cons_true(~A, ~le, x, y, List.zip(&2, A, &2, A, y <> t, t), hxy) : {_ == True{} : Bool}
   hyt
 
+def internal_sorted_le_step(~A: Data, ~le: A -> A -> Bool, -x: A, +y: A, +t: List<&2, A>, b: Bool, e: {le(x, y) == b : Bool}, h: MList.sorted_by(~A, ~le, x <> y <> t)) -> {le(x, y) == True{} : Bool}:
+  match b:
+    case True{}:
+      e
+    case False{}:
+      Empty.absurd({le(x, y) == True{} : Bool}, MNat.internal_false_ne_true(Equal.trans(Bool, False{}, List.all(~&1, ~(A & A), ~(p => le(Pair.fst(A, A, p), Pair.snd(A, A, p))), (x, y) <> List.zip(&2, A, &2, A, y <> t, t)), True{}, MList.internal_sorted_cons_false(~A, ~le, x, y, List.zip(&2, A, &2, A, y <> t, t), e), h)))
+
+def internal_sorted_tail_step(~A: Data, ~le: A -> A -> Bool, -x: A, +y: A, +t: List<&2, A>, b: Bool, e: {le(x, y) == b : Bool}, h: MList.sorted_by(~A, ~le, x <> y <> t)) -> MList.sorted_by(~A, ~le, y <> t):
+  match b:
+    case True{}:
+      Equal.trans(Bool, List.all(~&1, ~(A & A), ~(p => le(Pair.fst(A, A, p), Pair.snd(A, A, p))), List.zip(&2, A, &2, A, y <> t, t)), List.all(~&1, ~(A & A), ~(p => le(Pair.fst(A, A, p), Pair.snd(A, A, p))), (x, y) <> List.zip(&2, A, &2, A, y <> t, t)), True{}, MList.internal_sorted_cons_true(~A, ~le, x, y, List.zip(&2, A, &2, A, y <> t, t), e), h)
+    case False{}:
+      Empty.absurd(MList.sorted_by(~A, ~le, y <> t), MNat.internal_false_ne_true(Equal.trans(Bool, False{}, List.all(~&1, ~(A & A), ~(p => le(Pair.fst(A, A, p), Pair.snd(A, A, p))), (x, y) <> List.zip(&2, A, &2, A, y <> t, t)), True{}, MList.internal_sorted_cons_false(~A, ~le, x, y, List.zip(&2, A, &2, A, y <> t, t), e), h)))
+
 def internal_sorted_cons_cons_elim_le(~A: Data, ~le: A -> A -> Bool, +x: A, +y: A, +t: List<&2, A>, h: MList.sorted_by(~A, ~le, x <> y <> t)) -> {le(x, y) == True{} : Bool}:
-  MList.internal_and_left(le(x, y), List.all(~&1, ~(A & A), ~(p => le(Pair.fst(A, A, p), Pair.snd(A, A, p))), List.zip(&2, A, &2, A, y <> t, t)), h)
+  internal_sorted_le_step(~A, ~le, x, y, t, le(x, y), {==}, h)
 
 def internal_sorted_cons_cons_elim_tail(~A: Data, ~le: A -> A -> Bool, +x: A, +y: A, +t: List<&2, A>, h: MList.sorted_by(~A, ~le, x <> y <> t)) -> MList.sorted_by(~A, ~le, y <> t):
-  MList.internal_and_right(le(x, y), List.all(~&1, ~(A & A), ~(p => le(Pair.fst(A, A, p), Pair.snd(A, A, p))), List.zip(&2, A, &2, A, y <> t, t)), h)
+  internal_sorted_tail_step(~A, ~le, x, y, t, le(x, y), {==}, h)
 
 def internal_sorted_tail(~A: Data, ~le: A -> A -> Bool, +x: A, +xs: List<&2, A>, h: MList.sorted_by(~A, ~le, x <> xs)) -> MList.sorted_by(~A, ~le, xs):
   match xs:
