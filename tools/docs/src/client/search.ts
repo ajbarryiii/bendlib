@@ -1,7 +1,7 @@
 // Search page client: names/docs search and law-shape search over search-index.json.
 // Bundled by build.ts into assets/search.js; builds DOM with textContent only (hub text is untrusted).
 
-import { compile, statementNodes, contains, ShapeError, type Node, type Pattern } from "../shape.ts";
+import { compile, statementNodes, contains, looksLikeShape, ShapeError, type Node, type Pattern } from "../shape.ts";
 import type { SearchIndex } from "../searchindex.ts";
 
 type Row = SearchIndex["d"][number];
@@ -19,7 +19,6 @@ function nodesOf(i: number): Node[] | null {
   return parsed.get(i)!;
 }
 
-const looksLikeShape = (q: string) => /(^|[^\p{L}\p{N}_])_($|[^\p{L}\p{N}_])|[(){}[\]]|==/u.test(q);
 
 function shapeSearch(q: string, lawsOnly: boolean): number[] {
   const pat: Pattern = compile(q);

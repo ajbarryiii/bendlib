@@ -29,6 +29,13 @@ test("check: the good fixture is green on the pinned compiler", () => {
   expect(r.code).toBe(0);
 });
 
+test("check: a missing compiler is a toolchain error, exit 2, no stack (planted negative)", () => {
+  const r = runWith({ BEND_CLI: "/nonexistent/bend" }, "check.ts", join(dir, "fixtures/good"));
+  expect(r.code).toBe(2);
+  expect(r.out).toContain("toolchain mismatch");
+  expect(r.out).not.toMatch(STACK);
+});
+
 test("twins: the good fixture's generated section is up to date", () => {
   expect(run("twins.ts", join(dir, "fixtures/good"), "--check").code).toBe(0);
 });
@@ -146,9 +153,9 @@ test("lint allows a predicate's own ~template params, lambda binders, and flags 
   expect(r.out).not.toContain("ev_bad.bend");
   expect(r.out).not.toContain("evidence/");
   // planted negatives: a non-Base call, a ~MNat.le passed uncalled, and an own def passed uncalled
-  expect(r.out).toContain("bad_call.bend:6: predicate 'bad_call' calls 'helper', which is not a Base function");
-  expect(r.out).toContain("bad_ref.bend:4: predicate 'bad_ref' refers to 'MNat.le', which is not a Base function");
-  expect(r.out).toContain("bad_own.bend:6: predicate 'bad_own' refers to 'own_helper', which is not a Base function");
+  expect(r.out).toContain("bad_call.bend:7: predicate 'bad_call' calls 'helper', which is not a Base function");
+  expect(r.out).toContain("bad_ref.bend:5: predicate 'bad_ref' refers to 'MNat.le', which is not a Base function");
+  expect(r.out).toContain("bad_own.bend:7: predicate 'bad_own' refers to 'own_helper', which is not a Base function");
 });
 
 test("lint still flags a bad file when the evidence directory is passed directly (negative fixtures)", () => {
@@ -247,6 +254,65 @@ test("lock: a public value def is locked, and changing a frozen body fails (plan
   const r = run("lock.ts", tmp, "--check");
   expect(r.code).toBe(1);
   expect(r.out).toContain("m.ins (published in 0.1.0.0) changed");
+});
+
+test("lock: a law header with a trailing comment is still locked, so changing it fails (planted negative)", () => {
+  const tmp = mkdtempSync(join(tmpdir(), "bend-lock-comment-"));
+  const src = join(tmp, "m.bend");
+  const law = (claim: string) => ["import Base", "", "# A law.", "law noted: # a note", "  for n: Nat", `  ${claim}`, "", "def noted(n):", "  {==}", ""].join("\n");
+  writeFileSync(src, law("{Nat.add(n, 0n) == n : Nat}"));
+  expect(run("lock.ts", tmp, "--update").code).toBe(0);
+  expect(parseLock(readFileSync(join(tmp, "PUBLIC_API.lock"), "utf8"))["m.noted"].kind).toBe("law");
+  expect(run("lock.ts", tmp, "--freeze", "0.1.0.0").code).toBe(0);
+  writeFileSync(src, law("{n == n : Nat}"));
+  const r = run("lock.ts", tmp, "--check");
+  expect(r.code).toBe(1);
+  expect(r.out).toContain("m.noted (published in 0.1.0.0) changed");
+});
+
+test("lint and lock reject a one-line or indented law the tools cannot read (planted negatives)", () => {
+  for (const header of ["law one_line: for m: Nat {m == m : Nat}", " law indented:\n  for m: Nat\n  {m == m : Nat}"]) {
+    const tmp = mkdtempSync(join(tmpdir(), "bend-stray-law-"));
+    writeFileSync(join(tmp, "m.bend"), ["import Base", "", "# A law.", header, "", "def x(m):", "  {==}", ""].join("\n"));
+    const lint = run("lint.ts", tmp);
+    expect(lint.code).toBe(1);
+    expect(lint.out).toContain("a law must be a column-0 'law name:' block");
+    const lock = run("lock.ts", tmp, "--update");
+    expect(lock.code).toBe(1);
+    expect(lock.out).toContain("is not locked");
+  }
+});
+
+test("lock refuses two modules that share a basename, and flags entries gone from the source", () => {
+  const tmp = mkdtempSync(join(tmpdir(), "bend-lock-dup-"));
+  const mod = ["import Base", "", "# A law.", "law same:", "  for -m: Nat", "  {m == m : Nat}", "", "def same(m):", "  {==}", ""].join("\n");
+  for (const d of ["a", "b"]) { mkdirSync(join(tmp, d)); writeFileSync(join(tmp, d, "x.bend"), mod); }
+  const dup = run("lock.ts", tmp, "--update");
+  expect(dup.code).toBe(1);
+  expect(dup.out).toContain("'x.same' is defined twice");
+
+  const gone = mkdtempSync(join(tmpdir(), "bend-lock-gone-"));
+  writeFileSync(join(gone, "x.bend"), mod);
+  writeFileSync(join(gone, "PUBLIC_API.lock"), JSON.stringify({ format: LOCK_FORMAT, entries: { "x.old": anchored({ since: null }) } }));
+  const r = run("lock.ts", gone, "--check");
+  expect(r.code).toBe(1);
+  expect(r.out).toContain("no longer in the source (run --update): x.old");
+});
+
+test("lint: a public predicate needs a doc line (planted negative)", () => {
+  const tmp = mkdtempSync(join(tmpdir(), "bend-lint-preddoc-"));
+  writeFileSync(join(tmp, "m.bend"), ["import Base", "", "def undocumented(n: Nat) -> Data:", "  {Nat.is_le(n, 3n) == True{} : Bool}", ""].join("\n"));
+  const r = run("lint.ts", tmp);
+  expect(r.code).toBe(1);
+  expect(r.out).toContain("predicate 'undocumented' has no '#' doc line above it");
+});
+
+test("lint --erasure reports a module that does not check instead of passing it (planted negative)", () => {
+  const tmp = mkdtempSync(join(tmpdir(), "bend-lint-baseline-"));
+  writeFileSync(join(tmp, "m.bend"), ["import Base", "", "# A false proof.", "law broken:", "  for n: Nat", "  {Nat.add(n, 1n) == n : Nat}", "", "def broken(n):", "  {==}", ""].join("\n"));
+  const r = run("lint.ts", tmp, "--erasure");
+  expect(r.code).toBe(1);
+  expect(r.out).toContain("erasure not checked: the unmodified module fails");
 });
 
 test("lint: a public law statement may not name an internal_ helper (planted pair)", () => {
@@ -713,6 +779,19 @@ test("packageFiles: an indented `import` inside a comment is not a foreign file 
   const tmp = mkdtempSync(join(tmpdir(), "bend-hash-comment-"));
   writeFileSync(join(tmp, "main.bend"), 'import Base\n\ndef f(x: U32) -> IO(U32):\n  # import "./ghost.c" is only a note\n  x\n');
   expect(Object.keys(packageFiles(join(tmp, "main.bend")))).toEqual(["main.bend"]);
+});
+
+test("packageFiles follows every local import form bend loads, and drops a BOM (planted negatives)", () => {
+  const tmp = mkdtempSync(join(tmpdir(), "bend-hash-forms-"));
+  writeFileSync(join(tmp, "all.bend"), "﻿import Base\nimport plain.bend as P\n  import ./indented.bend as I  # a note\n\ndef f() -> Nat:\n  Nat.add(P.p(), I.i())\n");
+  writeFileSync(join(tmp, "plain.bend"), "import Base\n\ndef p() -> Nat:\n  1n\n");
+  writeFileSync(join(tmp, "indented.bend"), "import Base\n\ndef i() -> Nat:\n  2n\n");
+  writeFileSync(join(tmp, "unused.bend"), "import Base\n");
+  const p = Bun.spawnSync([BEND, join(tmp, "all.bend"), "--check-only"], { env: { ...process.env, BEND_NO_TELEMETRY: "1" } });
+  expect(new TextDecoder().decode(p.stdout)).toContain("ALL PROOFS CHECK");
+  const files = packageFiles(join(tmp, "all.bend"));
+  expect(Object.keys(files).sort()).toEqual(["all.bend", "indented.bend", "plain.bend"]);
+  expect(files["all.bend"].startsWith("import Base")).toBe(true);
 });
 
 test("hash: a missing, non-file or climbing entry is a typed usage error, exit 2, no stack", () => {

@@ -2,7 +2,7 @@
 // as bend 2.0.27's printer shows them (copied from bend-mathlib 0.1.0.1 and hub packages).
 
 import { describe, expect, test } from "bun:test";
-import { compile, matchStatement, parse, normalize, ShapeError } from "../src/shape.ts";
+import { compile, looksLikeShape, matchStatement, parse, normalize, ShapeError } from "../src/shape.ts";
 
 const LAWS: Record<string, [string, string]> = {
   append_nil: ["List.append(a, A, xs, [])", "xs"],
@@ -73,6 +73,17 @@ describe("law-shape search", () => {
   test("a bare name finds every statement that mentions it", () => {
     expect(hits("List.length")).toEqual(["length_append"]);
     expect(hits("None")).toEqual(["peek_empty"]);
+  });
+  test("auto mode treats a dotted name as a shape, as the search help promises", () => {
+    expect(looksLikeShape("List.length")).toBe(true);
+    expect(looksLikeShape(" Csv.encode_row ")).toBe(true);
+    expect(looksLikeShape("List.append(_, Nil{})")).toBe(true);
+  });
+  test("planted negative: plain words, and several dotted words, stay a names-and-docs search", () => {
+    expect(looksLikeShape("add_comm")).toBe(false);
+    expect(looksLikeShape("reverse twice")).toBe(false);
+    expect(looksLikeShape("List.length List.append")).toBe(false);
+    expect(looksLikeShape("v1.2")).toBe(false);
   });
   test("literals and operators must match exactly", () => {
     expect(hits("Nat.add(_, 1n)")).toEqual([]);

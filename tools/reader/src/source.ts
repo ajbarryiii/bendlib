@@ -95,6 +95,10 @@ export function installedVersion(bin?: string): string {
   return resolveBend(bin).version;
 }
 
+function installedVersionOrNull(bin?: string): string | null {
+  try { return installedVersion(bin); } catch { return null; }
+}
+
 /** The `const VERSION` a bend checkout's bend2/main.ts declares. */
 export function declaredVersion(dir: string): string {
   const main = path.join(dir, "bend2", "main.ts");
@@ -260,7 +264,8 @@ export async function bendSource(opts: SourceOptions | string = {}): Promise<Ben
   const s = fs.existsSync(path.join(vdir, "manifest.json"))
     ? verifyCache(vdir, version)
     : await fetchTag(vdir, version);
-  verifyAgainstInstalled(s.dir, o.bin);
+  // Only the installed version can be compared with the installed compiler's Base.
+  if (o.version === undefined || o.version === installedVersionOrNull(o.bin)) verifyAgainstInstalled(s.dir, o.bin);
   return s;
 }
 

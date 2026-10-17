@@ -12,7 +12,7 @@ import { hubHash, packageFiles } from "../../mathlib/hash.ts";
 
 const MATHLIB = "0xafc61ca8b7738a6df7f28eddf80168f8";   // bend-mathlib@0.1.0.1
 const KERNEL = "0xb5c8145e53a6a127d611f45f602666ec";    // bendlib-kernel-list@1.0.0.0 (ours, so its name stays)
-// bend-tensors@0.0.0.2, by hash: its name record left the hub, its content did not.
+// bend-tensors@0.0.0.2, by hash: a third-party name can be relinked or dropped, its content cannot.
 const TENSORS = "0x39d8166231e68361eb37e8bef9287b8a";
 const ANON = "0x6648eb78d8a978a0e437eabbfbc841cd";      // anonymous; imports 0xe49a3e65…/parse.bend
 const PARSE = "0xe49a3e6521e1b71e55654a885f27bcc1";
@@ -29,9 +29,14 @@ function fakeBwrap(script: string): string {
 const root = mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), "bend-docs-e2e-"));
 const out = join(root, "dist");
 let log = "";
+// The live name of TENSORS, when bend-tensors still maps a version to it: the build must show it.
+let tensorsName: string | null = null;
 const read = (p: string) => readFileSync(join(out, p), "utf8");
 
-beforeAll(() => {
+beforeAll(async () => {
+  const rec = (await fetch("https://hub.bend-lang.com/name/bend-tensors").then((r) => r.json()).catch(() => null)) as { versions?: { version: string; hash: string }[] } | null;
+  const v = rec?.versions?.find((x) => x.hash === TENSORS);
+  tensorsName = v ? `bend-tensors@${v.version}` : null;
   const p = Bun.spawnSync([process.execPath, join(import.meta.dir, "..", "build.ts"),
     "--only", `bend-mathlib@0.1.0.1,bendlib-kernel-list@1.0.0.0,${TENSORS},${ANON}`, "--out", out, "--cache", join(root, "cache"), "--jobs", "4"]);
   log = new TextDecoder().decode(p.stdout) + new TextDecoder().decode(p.stderr);
@@ -46,7 +51,7 @@ describe("four-package build from the live hub", () => {
       `pkg/${ANON}/index.html`, `pkg/${ANON}/format.bend.html`, "name/bend-mathlib/index.html", "name/bendlib-kernel-list/index.html", `pkg/${KERNEL}/index.html`]) {
       expect(existsSync(join(out, f))).toBe(true);
     }
-    expect(log).toContain("packages   4 (2 carry a name@version)");
+    expect(log).toContain(`packages   4 (${tensorsName ? 3 : 2} carry a name@version)`);
     expect(log).toContain("fetch: 4 new packages fetched and verified");
   });
 
@@ -54,6 +59,9 @@ describe("four-package build from the live hub", () => {
     const html = read("authors.html");
     expect(html).toContain("Document your package");
     expect(html).toContain("What the site reads");
+    // GitHub runs the hourly cron every few hours, so the page promises no hourly rebuild.
+    expect(html).toContain("the next scheduled rebuild (every few hours)");
+    expect(html).not.toContain("hourly");
     expect(read("index.html")).toContain('href="authors.html">Authors</a>');
   });
 
@@ -109,13 +117,16 @@ describe("four-package build from the live hub", () => {
 
   test("the index lists the four packages, named ones first, with statuses from the real checker", () => {
     const html = read("index.html");
-    const [m, k, t, a] = ['bend-mathlib</a> <span class="pill">@0.1.0.1</span>', 'bendlib-kernel-list</a> <span class="pill">@1.0.0.0</span>', `${TENSORS.slice(0, 10)}…</a>`, `${ANON.slice(0, 10)}…</a>`].map((s) => html.indexOf(`>${s}`));
+    const tensors = tensorsName ? `${tensorsName.split("@")[0]}</a> <span class="pill">@${tensorsName.split("@")[1]}</span>` : `${TENSORS.slice(0, 10)}…</a>`;
+    const [m, k, t, a] = ['bend-mathlib</a> <span class="pill">@0.1.0.1</span>', 'bendlib-kernel-list</a> <span class="pill">@1.0.0.0</span>', tensors, `${ANON.slice(0, 10)}…</a>`].map((s) => html.indexOf(`>${s}`));
     expect(m).toBeGreaterThan(0);
     expect(k).toBeGreaterThan(0);
-    expect(Math.min(t, a)).toBeGreaterThan(Math.max(m, k));
+    expect(t).toBeGreaterThan(0);
+    expect(a).toBeGreaterThan(Math.max(m, k, t));
+    if (tensorsName === null) expect(t).toBeGreaterThan(Math.max(m, k));
     expect(read(`pkg/${MATHLIB}/index.html`)).toMatch(/<h1>bend-mathlib@0\.1\.0\.1 <span class="st st-checks">/);
     expect(read(`pkg/${KERNEL}/index.html`)).toMatch(/<h1>bendlib-kernel-list@1\.0\.0\.0 <span class="st st-checks">/);
-    expect(read(`pkg/${TENSORS}/index.html`)).toMatch(new RegExp(`<h1>${TENSORS.slice(0, 10)} <span class="st st-unsafe">`));
+    expect(read(`pkg/${TENSORS}/index.html`)).toMatch(new RegExp(`<h1>${(tensorsName ?? TENSORS.slice(0, 10)).replace(/\./g, "\\.")} <span class="st st-unsafe">`));
   });
 
   test("the anonymous package shows its real hub dependency", () => {
@@ -160,6 +171,15 @@ describe("four-package build from the live hub", () => {
   });
 });
 
+describe("the index filter hides rows on a phone", () => {
+  test("planted negative: the narrow layout's display:block on rows cannot override [hidden]", () => {
+    const css = readFileSync(join(import.meta.dir, "..", "assets", "style.css"), "utf8");
+    // site.ts filters by setting `hidden`; an author `display` beats the browser's own [hidden] rule.
+    expect(css).toMatch(/table\.pkgs tr\{display:block/);
+    expect(css).toContain("[hidden]{display:none!important}");
+  });
+});
+
 describe("--local preview", () => {
   test("stages an unpublished package, banners every page, and prints the package page path", () => {
     const entry = join(import.meta.dir, "..", "..", "mathlib", "fixtures", "good", "list.bend");
@@ -171,6 +191,8 @@ describe("--local preview", () => {
     const hash = hubHash(packageFiles(entry));
     expect(existsSync(join(dir, "pkg", hash, "index.html"))).toBe(true);
     expect(readFileSync(join(dir, "pkg", hash, "index.html"), "utf8")).toContain("Local preview of an unpublished package — not on BendHub.");
+    // A preview of one package is not "a subset of the hub"; its banner says what it is.
+    expect(readFileSync(join(dir, "pkg", hash, "index.html"), "utf8")).not.toContain("partial build");
     expect(readFileSync(join(dir, "pkg", hash, "list.bend.html"), "utf8")).toContain("Appending the empty list on the right changes nothing.");
     expect(msg).toContain(`local package page: pkg/${hash}/index.html`);
   }, 120_000);
@@ -262,6 +284,7 @@ describe("a broken hub package does not abort the build", () => {
         const p = new URL(req.url).pathname;
         if (p === "/index.json") return Response.json(index);
         if (p === "/names.json") return Response.json([]);
+        if (p === "/packages.json") return Response.json({ total: index.length, packages: index });
         if (p === `/${fine}/manifest`) return new Response(manifest);
         if (p === `/${fine}/m.bend`) return new Response(body);
         return new Response("not found", { status: 404 });

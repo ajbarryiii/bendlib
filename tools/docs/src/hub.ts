@@ -61,30 +61,74 @@ export async function fetchIndex(): Promise<IndexEntry[]> {
 /** Keeps records with a well-formed name and at least one well-formed version/hash; logs and drops the rest (PLAN F1). */
 export function validNameRecords(records: NameRecord[]): NameRecord[] {
   const kept: NameRecord[] = [];
-  const dropped: string[] = [];
+  const invalid: string[] = [], empty: string[] = [];
   for (const n of records) {
     const versions = (n.versions ?? []).filter((v) => VERSION.test(v.version) && HASH.test(v.hash));
     if (NAME.test(n.name) && versions.length > 0) kept.push({ ...n, versions });
-    else dropped.push(n.name);
+    else if (NAME.test(n.name) && (n.versions ?? []).length === 0) empty.push(n.name);
+    else invalid.push(n.name);
   }
-  if (dropped.length) console.error(`hub: dropped ${dropped.length} invalid name record(s): ${dropped.slice(0, 5).join(", ")}`);
+  if (invalid.length) console.error(`hub: dropped ${invalid.length} invalid name record(s): ${invalid.slice(0, 5).join(", ")}`);
+  if (empty.length) console.error(`hub: skipped ${empty.length} name(s) with no versions: ${empty.slice(0, 5).join(", ")}`);
   return kept;
 }
 
-// names.json answers with the 30 newest names unless `limit` asks for more (observed 2026-09-28)
-export const NAMES_LIMIT = 100_000;
+// names.json answers at most this many names whatever `limit` or paging asks, while stats.json
+// counted 204 (observed 2026-10-17); a list this long is truncated, so packages.json fills it in.
+export const NAMES_CAP = 100;
+// packages.json pages by `after=<offset>` and answers at most 100 rows per page (observed 2026-10-17).
+export const PACKAGES_PAGE = 100;
 
-/** names.json lists only each name's latest version; the per-name record adds `versions`. */
+type Listed = { name: string; owner_login?: string; ts?: number; latest?: NameRecord["latest"] | null };
+export type PackageRow = { hash: string; ts: number; name?: string | null; version?: string | null };
+
+/** Every row of packages.json, all pages; an error when the pages hold fewer packages than its `total`. */
+export async function fetchPackageList(hub = HUB): Promise<PackageRow[]> {
+  const rows = new Map<string, PackageRow>();
+  let total = 0;
+  for (let after = 0; ; after += PACKAGES_PAGE) {
+    const page = await getJson<{ total: number; packages: PackageRow[] }>(`${hub}/packages.json?sort=new&limit=${PACKAGES_PAGE}&after=${after}`);
+    total = page.total;
+    for (const r of page.packages) rows.set(r.hash, r);
+    if (page.packages.length === 0 || after + PACKAGES_PAGE >= total) break;
+  }
+  if (rows.size < total) throw new Error(`packages.json listed ${rows.size} packages over its pages, but reports ${total}: the name list would be incomplete`);
+  return [...rows.values()];
+}
+
+/** The union of names.json (top and newest) and every name packages.json carries, each completed by its `/name/<n>` record. */
 export async function fetchNames(jobs = 8, hub = HUB): Promise<NameRecord[]> {
-  const list = await getJson<Omit<NameRecord, "versions">[]>(`${hub}/names.json?limit=${NAMES_LIMIT}`);
-  if (list.length >= NAMES_LIMIT) throw new Error(`names.json returned ${list.length} names, the requested limit: the list may be truncated`);
-  const named = list.filter((n) => NAME.test(n.name));  // never even request a hostile name
-  if (named.length !== list.length) console.error(`hub: dropped ${list.length - named.length} name record(s) with an invalid name`);
-  const out = await pool(named, jobs, async (n) => {
-    const full = await getJson<NameRecord>(`${hub}/name/${encodeURIComponent(n.name)}`);
-    return { ...n, ...full, versions: full.versions ?? [{ version: n.latest.version, hash: n.latest.hash, ts: n.latest.ts }] };
+  const [top, newest, rows] = await Promise.all([
+    getJson<Listed[]>(`${hub}/names.json?limit=${NAMES_CAP}`),
+    getJson<Listed[]>(`${hub}/names.json?sort=new&limit=${NAMES_CAP}`),
+    fetchPackageList(hub),
+  ]);
+  const listed = new Map<string, Listed>();
+  for (const n of [...top, ...newest]) if (!listed.has(n.name)) listed.set(n.name, n);
+  const before = listed.size;
+  for (const r of rows) if (typeof r.name === "string" && !listed.has(r.name)) listed.set(r.name, { name: r.name });
+  if (top.length >= NAMES_CAP) console.error(`hub: names.json stopped at its cap of ${NAMES_CAP}; packages.json added ${listed.size - before} more name(s)`);
+  const all = [...listed.values()];
+  const named = all.filter((n) => NAME.test(n.name));  // never even request a hostile name
+  if (named.length !== all.length) console.error(`hub: dropped ${all.length - named.length} name record(s) with an invalid name`);
+  const vanished: string[] = [], unreachable: string[] = [];
+  const out = await pool(named, jobs, async (n): Promise<NameRecord | null> => {
+    const latest = n.latest == null ? [] : [{ version: n.latest.version, hash: n.latest.hash, ts: n.latest.ts }];
+    try {
+      const r = await get(`${hub}/name/${encodeURIComponent(n.name)}`);
+      if (r.status === 404 || r.status === 410) { vanished.push(n.name); return null; }
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const full = (await r.json()) as NameRecord;
+      return { ...n, ...full, versions: full.versions ?? latest } as NameRecord;
+    } catch (e) {
+      unreachable.push(`${n.name} (${e instanceof Error ? e.message : String(e)})`);
+      // The listing's latest version is still a true name@version; without one the name is dropped.
+      return n.latest == null ? null : ({ owner_login: "", ts: 0, ...n, versions: latest } as NameRecord);
+    }
   });
-  return validNameRecords(out);
+  if (vanished.length) console.error(`hub: ${vanished.length} name(s) vanished since the listing: ${vanished.slice(0, 5).join(", ")}`);
+  if (unreachable.length) console.error(`hub: ${unreachable.length} name record(s) could not be fetched, kept with the listing's latest version where it has one: ${unreachable.slice(0, 5).join(", ")}`);
+  return validNameRecords(out.filter((n): n is NameRecord => n !== null));
 }
 
 export async function pool<T, R>(items: T[], jobs: number, f: (x: T, i: number) => Promise<R>): Promise<R[]> {

@@ -34,7 +34,7 @@ let JSON_MODE = false;
 
 function num(flag: string, v: string | undefined, min: number, usage: string): number {
   const n = Number(v);
-  if (v === undefined || !Number.isInteger(n) || n < min) die(`${flag} needs an integer ≥ ${min}\n${usage}`, "usage");
+  if (v === undefined || !/^\d+$/.test(v) || !Number.isSafeInteger(n) || n < min) die(`${flag} needs an integer ≥ ${min}\n${usage}`, "usage");
   return n;
 }
 
@@ -184,7 +184,7 @@ async function runLawcheck(argv: string[]) {
     if (e instanceof BendReadError) die(`cannot load ${o.file}:\n${e.message}`, "load");
     if (e instanceof SourceError) die(e.message, "source");
     if (e instanceof ModuleError) die(`${o.file} does not type-check, so no instance can be evaluated:\n${e.message}`, "module");
-    throw e;
+    die(e instanceof Error ? e.message : String(e), "error");
   }
   console.log(o.json ? JSON.stringify(report, null, 2) : human(report));
   const has = (s: LawResult["status"]) => report.laws.some((l) => l.status === s);
@@ -203,7 +203,7 @@ async function runMutate(argv: string[]) {
     if (e instanceof BendReadError) die(`cannot load ${o.file}:\n${e.message}`, "load");
     if (e instanceof SourceError) die(e.message, "source");
     if (e instanceof ModuleError) die(`${o.file} does not type-check:\n${e.message}`, "module");
-    throw e;
+    die(e instanceof Error ? e.message : String(e), "error");
   }
   console.log(o.json ? JSON.stringify(report, null, 2) : humanMutate(report));
   const ms = report.defs.flatMap((d) => d.mutants);

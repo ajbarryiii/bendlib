@@ -79,7 +79,7 @@ those files, their outcomes are unchanged.
 | F36 | bend 2.0.33 removed Base's `.fin` helpers (`Nat.div.fin`, `Nat.mod.fin`, `String.eq.fin`); `Nat.div`/`Nat.mod`/`String.eq` now project with `Pair.fst`/`Pair.snd`. On 2.0.34 the published bend-mathlib 0.4.0.0 `nat.bend` and `string.bend` fail (`expected : a defined name / observed : Nat.div.fin`), while 0.3.0.0 and bendlib-kernel-list 1.0.0.0 still check | empty private `BEND_LIB`, `import bend-mathlib@0.4.0.0/nat.bend` (and by hash) on 2.0.34; nightly issue #24 | A proof that names a Base helper breaks when Base drops it: proofs name only Base defs a statement needs, and a Base removal is repaired by a new release (§8) |
 | F37 | bend 2.0.35 keys a file's own names `ns:name` inside bend.ts (`parse_qual`; 2.0.34 used `ns.name`), and still prints them `ns.name` (`name_key`), so a name in printed text and the same name as a book key differ after the namespace | bend 2.0.35 `bend2/bend.ts` `parse_qual`/`name_key` (upstream #1156); reader goldens `hub_list.json` diff `0x…/list.append_nil2` → `0x…/list:append_nil2` | `@bendlib/reader` keeps `Decl.name` the book key and exports `inNamespace`/`localName`/`printedName`; lawcheck keys types, ctors, predicates and term decls by `printedName` because it matches them against printed text |
 | F38 | `bend --verdict` (2.0.36, 2.0.37) fails a file when any def of a module it imports is out of BendTT's scope, even one it never uses (a file importing bend-mathlib 0.7.2.0 `sort.bend` and proving `{Nat.add(2n, 0n) == 2n : Nat}` fails; importing `list.bend` passes). A template lambda that captures a run-time value inside a type (`List.all(~&2, ~A, ~(y => le(lo, y)), xs)`) is out of scope ("a template argument that depends on a run-time value", upstream #1483), while a recursive Bool def over the same list is not. With that restated, every def `sort.bend` leaves out is "no model" for an abstract `~le_trans`/`~le_total` (upstream #1182); the Nat instances (`sort_by_sorted_nat` etc.) translate, and the #1263 branch checks every bend-mathlib module | issue #25; `bend sort.bend -o x.bendtt` before/after on 2.0.36; #1263 branch fb1577ed `--verdict` | bend-mathlib states predicates under `~` binders as recursions; CI allows blocked modules only "no model" reasons |
-| F39 | Base after 2.0.37 (upstream #1548, #1459) defines `List.all`/`any`/`find`/`contains` through a `.go` loop that matches the list before its flag, and `String.order` directly instead of through `String.cmp`, so `List.all(h <> t)` no longer unfolds to `Bool.and(f(h), List.all(t))`. A short-circuit over an erased tail (`List.all.go(t, False{})`) never reduces and an erased binder can't be matched, so 7 frozen list lemmas (`all_append`, `any_append`, `contains_append`, `mem_cons_self`, `mem_cons_of_mem`, `sorted_cons_cons_elim_le`, `sorted_cons_cons_elim_tail`) have no proof there (upstream #1616). Upstream reverted #1548 for that report (#1629, e5527d5), so on main only `String.order` differs and every module checks with the String.order bridge proofs from `research/candidates/base-next-bridges.bend` | bend main 234cb9b `--check-only` of bend-mathlib 0.7.3.0 with each failing def stubbed in turn: 21 list.bend defs, 3 string.bend, 3 sort.bend | proofs unfold those functions only in `internal_` bridge lemmas whose proofs are per-Base; the rest of the package goes through them |
+| F39 | Base after 2.0.37 (upstream #1548, #1459) defines `List.all`/`any`/`find`/`contains` through a `.go` loop that matches the list before its flag, and `String.order` directly instead of through `String.cmp`, so `List.all(h <> t)` no longer unfolds to `Bool.and(f(h), List.all(t))`. A short-circuit over an erased tail (`List.all.go(t, False{})`) never reduces and an erased binder can't be matched, so 7 frozen list lemmas (`all_append`, `any_append`, `contains_append`, `mem_cons_self`, `mem_cons_of_mem`, `sorted_cons_cons_elim_le`, `sorted_cons_cons_elim_tail`) have no proof there (upstream #1616). Upstream reverted #1548 for that report (#1629, e5527d5), so on main only `String.order` differs and every module checks with the String.order bridge proofs from `research/candidates/base-next-bridges.bend` | bend main 234cb9b `--check-only` of bend-mathlib 0.7.3.0 with each failing def stubbed in turn: 21 list.bend defs, 3 string.bend, 3 sort.bend | proofs unfold those functions only in `internal_` lemmas (the cons bridges, plus the all/any map and reverse helpers), whose proofs are per-Base; the rest of the package goes through them |
 
 ---
 
@@ -160,7 +160,7 @@ package; a version bump that breaks it breaks one adapter, not every tool.
    `add_comm`, `add_assoc`, `mul_add`, `append_nil`, `append_assoc`, `length_append`,
    `reverse_reverse`, `le_refl`, `le_trans`, `lt_irrefl`. Modules are namespaces named after Base
    types (`MNat.add_comm`, `MList.append_assoc`, `MString.append_assoc`); names are unique per
-   module. Comparator-dependent predicates say so: `sorted_by`, `perm_by`. Ship `ge`/`gt` next to
+   module. Comparator-dependent predicates say so: `sorted_by`. Ship `ge`/`gt` next to
    `le`/`lt` with flip lemmas (Base's own lemmas use `Nat.is_ge`; `is_ge(a,b)` and `is_le(b,a)` are
    not definitionally equal).
 5. **Genericity and erasure.** Generic in `a: Quant, -A: Kind(a)` wherever the proof allows (F11);
@@ -169,7 +169,7 @@ package; a version bump that breaks it breaks one adapter, not every tool.
    erased** (`for -y`); a matched binder cannot be (F26) — `tools/mathlib/lint.ts` compares binders with the
    proof's scrutinees. Operations/comparators are templates (`~op`, `~le`) with template hypotheses
    (`for ~le_trans: …`) (F12, F13); template arguments must be closed, so the library ships instances
-   for `Nat`, `U32`, `Char`, `String`. `List.map` is a template over affine lists only
+   for `Nat`, `Bool` and `List<&2, Nat>`. `List.map` is a template over affine lists only
    (`List.map(~A: Type, ~B: Type, ~f, xs: List<A>)`), so map lemmas are `&1`-only; `map_map` works
    with a composed closed template (F28).
 6. **Orientation and `_sym` twins.** `%e : P` replaces the equation's right side with its left side,
@@ -237,20 +237,20 @@ quantities are independent: `rbtree<ak, av, -K: Kind(ak), -V: Kind(av)> is Kind(
 
 ### 3.5 Dev-mode imports (F21) and release
 - Sources always contain final import lines (`import bend-mathlib@0.3.0.0/list.bend as MList`).
-- The dev-mode helper (planned, not built; `devlib` absent, §7.1) builds repo-local `.devlib/` (git-ignored, recreated from empty each run because
-  `names/` entries are never re-validated, F29): `names/<name>@<ver>` → a **deterministic fake hash**
-  `"0x" + sha256("<name>@<ver>-dev")[0:32]` and `0x<hash>` → symlink to the working package. (The
-  real hash changes with every edit, so it is only computed at release.) It refuses to write outside
-  the repo and validates the 32-hex format (non-hex silently falls through to the hub).
+- The dev-mode helper `tools/mathlib/devlib.ts` rebuilds repo-local `.devlib/` (git-ignored) from empty
+  on every run (`names/` entries are never re-validated, F29): `0x<hash>` → symlink to the working
+  package, where `<hash>` is its real publish hash. A source can then `import 0x…/file.bend` from a
+  local package before it is published; `--check` fails when such a pin names a local package whose
+  content has since changed.
 - CI: fails on any `../` import leaving a package (it would bundle the other package, F2, and reaching
   one file under two namespaces is a hard `one namespace per file` error).
-- Release (owner, manual — names are tied to the owner's login, F1):
+- Release (a `release` bead or the owner; names are tied to the owner's login, F1, §9 D-release):
   1. `bun tools/mathlib/release.ts <pkgdir> <name> <version>`: fresh isolated `BEND_LIB`, every imported `name@version` resolves
      on the hub, computes the real publish hash locally (`cli_publish` algorithm: sorted paths,
      `"0x" + sha256(Σ sha256(content) + " " + path + "\n")[0:32]`), prints the commands.
-  2. Owner: `bend packages/<pkg>/all.bend --publish` (anonymous; prints `0x…`, must equal step 1).
+  2. `release.ts --publish` runs `bend packages/<pkg>/all.bend --publish` (anonymous; prints `0x…`, must equal step 1).
   3. Tool re-checks `import 0x…/all.bend` from an empty `BEND_LIB` (real hub fetch + hash verify).
-  4. Owner: `bend link <pkg>@<ver> 0x…` — the name is attached only to verified content.
+  4. `bend link <pkg>@<ver> 0x…` — the name is attached only to verified content.
   5. Tool appends `{name, version, hash, compiler}` to `RELEASES.md`; README shows the named import and
      the hash import (content survives even if a name is lost); git tag.
 - Versioning: dependents pin exact versions; nothing resolves ranges, so a fix release repairs nobody
@@ -376,7 +376,7 @@ it never proves anything.
 bendlib/                     GitHub: bendlib/bendlib (monorepo)
 ├── PLAN.md  README.md  LICENSE  AGENTS.md  RELEASES.md  toolchain.json
 ├── packages/bend-mathlib/   LICENSE all.bend *.bend PUBLIC_API.lock
-├── packages/bendlib-kernel-list/   (0.2 era; planned — not yet created)
+├── packages/bendlib-kernel-list/   list.bend LICENSE README.md (published 1.0.0.0, imported by hash)
 ├── tools/
 │   ├── comments.ts          comment lint
 │   ├── install-bend.ts      installs the pinned compiler
@@ -384,9 +384,11 @@ bendlib/                     GitHub: bendlib/bendlib (monorepo)
 │   ├── lawcheck/            lawcheck CLI (TS)
 │   ├── docs/                docs generator + site templates (TS)
 │   └── mathlib/             check.ts lint.ts twins.ts lock.ts index.ts hash.ts release.ts
-│                            lib.ts (+ fixtures, tools.test.ts)
+│                            devlib.ts lib.ts (+ fixtures, tools.test.ts)
 ├── examples/demo/           launch demo (before.bend, after.bend, demo.gif, demo.mp4, demo.sh)
-├── research/experiments/    evidence for F1–F34;  research/candidates/ (mathlib-0.2/, predicates/, perm/)
+├── research/experiments/    evidence for §1;  research/candidates/ (mathlib-0.2/, mathlib-0.4/, predicates/,
+│                            perm/, base-next-bridges.bend)
+├── .claude-plugin/  plugins/bend-mathlib/   Claude Code marketplace and the bend-mathlib agent skill
 └── .github/workflows/       ci.yml (mathlib gates, tool tests, nightly latest-compiler job)
                              docs.yml  lawcheck-release.yml (tag-triggered binaries)
 ```

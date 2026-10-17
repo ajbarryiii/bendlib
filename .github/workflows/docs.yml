@@ -43,14 +43,16 @@ jobs:
           [ -f tools/docs/.cache/status.json ] && h=$(sha256sum tools/docs/.cache/status.json | cut -d' ' -f1)
           echo "sha=$h" >> "$GITHUB_OUTPUT"
       - run: bun tools/docs/build.ts --jobs 4 --require-sandbox
+      # Checks finished before a failure are kept: status.json is written as the build goes.
       - name: did the docs status change?
         id: docs-changed
+        if: always() && steps.docs-status.outcome == 'success'
         run: |
           h=absent
           [ -f tools/docs/.cache/status.json ] && h=$(sha256sum tools/docs/.cache/status.json | cut -d' ' -f1)
-          [ "$h" != "${{ steps.docs-status.outputs.sha }}" ] && echo "yes=true" >> "$GITHUB_OUTPUT" || echo "yes=false" >> "$GITHUB_OUTPUT"
+          [ "$h" != absent ] && [ "$h" != "${{ steps.docs-status.outputs.sha }}" ] && echo "yes=true" >> "$GITHUB_OUTPUT" || echo "yes=false" >> "$GITHUB_OUTPUT"
       - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        if: steps.docs-changed.outputs.yes == 'true'
+        if: always() && steps.docs-changed.outputs.yes == 'true'
         with:
           path: |
             tools/docs/.cache

@@ -53,7 +53,7 @@ type PageOpts = { path: string; title: string; body: string; site: Site; scripts
 export function page(o: PageOpts): string {
   const r = (p: string) => rel(o.path, p);
   const scripts = (o.scripts ?? []).map((s) => `<script src="${r(s)}" defer></script>`).join("");
-  const partial = o.site.partial ? ` · partial build (a subset of the hub): dependents and counts cover only the packages built` : "";
+  const partial = o.site.partial && !o.site.local ? ` · partial build (a subset of the hub): dependents and counts cover only the packages built` : "";
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(o.title)}</title>
@@ -381,14 +381,14 @@ export function renderSearch(site: Site): string {
 <ol id="results" class="results"></ol>
 <section id="how" class="how">
 <h2>Law-shape search</h2>
-<p>A query with a standalone <code>_</code>, or with brackets or <code>==</code>, is a <strong>shape</strong>. It finds every law (and every def whose type is an equation) whose statement contains that shape somewhere, on either side.</p>
+<p>A query with a standalone <code>_</code>, with brackets or <code>==</code>, or that is one dotted name, is a <strong>shape</strong>. It finds every law (and every def whose type is an equation) whose statement contains that shape somewhere, on either side.</p>
 <ul>
 <li><code>_</code> matches one balanced sub-term: a name, a literal, a call like <code>List.append(a, A, xs, ys)</code>, or an operator term like <code>1n+m</code>. It never spans a comma, so it never matches two arguments.</li>
 <li><strong>Leading arguments can be left out.</strong> <code>List.append(_, Nil{})</code> matches <code>List.append(a, A, xs, [])</code>: a call pattern with <var>k</var> arguments matches the <em>last</em> <var>k</var> arguments, because quantities and types come first in Bend.</li>
 <li>Names match on a namespace suffix: <code>Csv.encode_row(_)</code> finds <code>lib.Csv.encode_row([])</code>, but <code>ode_row</code> finds nothing.</li>
 <li>Write constructors either way. Queries are rewritten the way bend prints terms: <code>Nil{}</code> is <code>[]</code>, <code>Zero{}</code> is <code>0n</code>, <code>Succ{n}</code> is <code>1n+n</code>, and <code>Con{h, t}</code> is <code>h &lt;&gt; t</code> (a chain ending in <code>Nil{}</code> is a list literal).</li>
 <li><code>lhs == rhs</code> matches a whole equation, and each side of the pattern must cover a whole side: <code>Nat.add(_, _) == Nat.add(_, _)</code> finds commutativity-shaped laws.</li>
-<li>A bare name such as <code>List.length</code> finds every statement that mentions it.</li>
+<li>A dotted name such as <code>List.length</code> finds every statement that mentions it; an undotted name such as <code>None</code> does so in <em>law shape</em> mode.</li>
 </ul>
 <p>Examples: <a href="?q=List.append(_%2C%20Nil%7B%7D)">List.append(_, Nil{})</a> · <a href="?q=Nat.add(_%2C%200n)">Nat.add(_, 0n)</a> · <a href="?q=List.reverse(List.reverse(_))">List.reverse(List.reverse(_))</a> · <a href="?q=Nat.add(_%2C%20_)%20%3D%3D%20Nat.add(_%2C%20_)">Nat.add(_, _) == Nat.add(_, _)</a></p>
 <h2>Names and docs</h2>
@@ -415,7 +415,7 @@ export function renderLlms(site: Site): string {
   for (const g of site.groups) {
     const p = g.latest;
     const status = p.status === null ? "not checked" : STATUS_TEXT[p.status];
-    lines.push(`- [${label(p)}](${pkgPage(p.hash)}): ${p.desc} (${status}, ${p.counts.proved}/${p.counts.laws} laws proved)`);
+    lines.push(`- [${label(p)}](${pkgPage(p.hash)}): ${p.desc.replace(/\s+/g, " ").trim()} (${status}, ${p.counts.proved}/${p.counts.laws} laws proved)`);
   }
   return lines.join("\n") + "\n";
 }
@@ -450,7 +450,7 @@ def sort(xs: List<&2, U32>) -> List<&2, U32>:
 `;
   const body = `<h1>Document your package</h1>
 <p class="lead">Put ordinary comments in your Bend source and publish; there is nothing else to configure.</p>
-<p>No signup or config beyond your BendHub account: publish to BendHub and the next hourly rebuild shows your package on this site.</p>
+<p>No signup or config beyond your BendHub account: publish to BendHub and the next scheduled rebuild (every few hours) shows your package on this site.</p>
 <h2>What the site reads</h2>
 <div class="tablewrap"><table class="files">
 <thead><tr><th scope="col">On the page</th><th scope="col">Where it comes from</th></tr></thead>

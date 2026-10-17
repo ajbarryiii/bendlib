@@ -40,7 +40,7 @@ If that audit trail is missing, then you must act as if the operation never happ
 ## Project Architecture
 
 bendlib is the foundation library for Bend 2 (https://github.com/bendlang/bend). Design, verified
-facts F1–F34 about bend 2.0.27 (re-run on 2.0.32), and the build order are in `PLAN.md`; cite a fact ID in a
+facts F1–F39 about bend 2.0.27 (re-run up to 2.0.37), and the build order are in `PLAN.md`; cite a fact ID in a
 why-comment instead of re-explaining it.
 
 - **A) bend-mathlib** (`packages/bend-mathlib`, Bend): proved lemmas and Base-only predicates,
@@ -69,15 +69,15 @@ bend/
 ├── tools/
 │   ├── comments.ts             comment lint (see "Comments" below)
 │   ├── install-bend.ts         installs the pinned compiler
-│   ├── mathlib/                check lint twins lock index hash release (+ fixtures, tools.test.ts)
+│   ├── mathlib/                check lint twins lock index hash release devlib (+ fixtures, tools.test.ts)
 │   ├── reader/                 @bendlib/reader (src/, test/, cli.ts)
 │   ├── lawcheck/               cli.ts, src/{lawcheck,checker,values,terms,types,mutate}.ts, test/
 │   └── docs/                   build.ts, src/, assets/, test/  (dist/ and .cache/ are git-ignored)
 ├── .claude-plugin/marketplace.json  the Claude Code marketplace; plugins/bend-mathlib/ is its plugin (the agent skill)
 ├── examples/demo/              before.bend after.bend demo.gif demo.mp4 demo.sh
 └── research/
-    ├── experiments/            the evidence behind F1–F34
-    └── candidates/             lawchecked statements waiting to be proved (mathlib-0.2/, perm/, predicates/)
+    ├── experiments/            the evidence behind the facts in PLAN.md §1
+    └── candidates/             lawchecked statements waiting to be proved (mathlib-0.2/, mathlib-0.4/, perm/, predicates/) and base-next-bridges.bend
 ```
 
 ---
@@ -162,10 +162,10 @@ their expected output, and what not to do. Read the whole bead before starting.
    bun tools/mathlib/devlib.ts --check
    bun tools/mathlib/devlib.ts run -- bun tools/mathlib/check.ts packages/bend-mathlib
    for m in $(find packages/bend-mathlib -name '*.bend' | sort); do bun tools/mathlib/devlib.ts run -- bun tools/lawcheck/cli.ts "$m" --max-instances 100 --strict --allow-skip cong2,eq_true_of_ne_false,foldl_eq_foldr,foldl_eq_foldr_sym,foldl_op_eq_foldr_op,foldl_op_eq_foldr_op_sym,le_antisymm_eq,le_total,le_total_d,le_total_of_not_le,le_total_true,le_total_true_sym,le_trans3,le_trans4,maybe_bind_assoc,maybe_bind_assoc_sym,maybe_bind_map,maybe_bind_map_sym,maybe_map_bind,maybe_map_bind_sym,maybe_map_compose,maybe_map_compose_sym,maybe_map_pure,maybe_map_pure_sym,maybe_pure_bind,maybe_pure_bind_sym,op_assoc4,op_assoc4_sym,op_comm3,op_comm3_sym,op_four,op_four_sym,op_left_comm,op_left_comm_sym,op_right_comm,op_right_comm_sym,subst || exit 1; done
-   bun tools/mathlib/lint.ts packages/bend-mathlib --erasure
+   bun tools/mathlib/devlib.ts run -- bun tools/mathlib/lint.ts packages/bend-mathlib --erasure
    bun tools/mathlib/twins.ts packages/bend-mathlib --check
    bun tools/mathlib/check.ts packages/bendlib-kernel-list
-   bun tools/mathlib/lint.ts packages/bendlib-kernel-list --kernel --erasure
+   bun tools/mathlib/devlib.ts run -- bun tools/mathlib/lint.ts packages/bendlib-kernel-list --kernel --erasure
    bun tools/mathlib/twins.ts packages/bendlib-kernel-list --check
    bun tools/mathlib/lock.ts packages/bend-mathlib --check
    tag=$(git describe --tags --match 'bend-mathlib-v*' --abbrev=0 2>/dev/null || true)

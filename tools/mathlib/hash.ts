@@ -1,6 +1,6 @@
 // hash: compute the BendHub content hash of a package, exactly as `bend --publish` does
-// (bend2/main.ts cli_publish + pkg_files): the entry at its basename, every local `./` import
-// at its path, every foreign `.c`/`.js` a def imports (tld.i, main.ts:646-648) at its path, a
+// (bend2/main.ts cli_publish + pkg_files): the entry at its basename, every local import (read
+// like bend.ts book_load: `./x.bend`, `x.bend`, indented or commented) at its path, every foreign `.c`/`.js` a def imports (tld.i, main.ts:646-648) at its path, a
 // LICENSE beside any file; "0x" + sha256 of "sha256(content) path\n" lines, 32 hex.
 //
 // A path that climbs above the entry's directory (`../`) is refused (exit 2): bend re-roots such
@@ -12,7 +12,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, join, normalize, relative } from "node:path";
-import { PkgError } from "./lib.ts";
+import { PkgError, importPaths, isHubImport } from "./lib.ts";
 
 const USAGE = "usage: bun tools/mathlib/hash.ts <entry.bend>";
 const usage = (msg: string): never => { console.error(`hash: ${msg}\n${USAGE}`); process.exit(2); };
@@ -32,14 +32,18 @@ export function packageFiles(entry: string): Record<string, string> {
   if (!existsSync(entry) || !statSync(entry).isFile()) throw new PkgError(`not a .bend file: ${entry}`);
   const root = dirname(entry);
   const files: Record<string, string> = {};
+  // bend drops a leading BOM before hashing (main.ts pkg_files).
   const read = (file: string): string => {
-    try { return readFileSync(file, "utf8"); }
+    try { return readFileSync(file, "utf8").replace(/^﻿/, ""); }
     catch { throw new PkgError(`cannot read ${file}`); }
   };
   const key = (file: string, at: string): string => {
     const k = normalize(at);
     if (k.startsWith("..") || k.startsWith("/")) {
       throw new PkgError(`${file} is outside the entry directory ${root}; bend re-roots such a package at an ancestor, which this tool refuses`);
+    }
+    if (k.split("/").slice(0, -1).some((s) => s.toLowerCase() === "license")) {
+      throw new PkgError(`${file} is in a directory named license, which bend refuses to publish`);
     }
     return k;
   };
@@ -54,7 +58,7 @@ export function packageFiles(entry: string): Record<string, string> {
     if (k in files) return;
     add(file, k);
     const text = files[k];
-    for (const m of text.matchAll(/^import\s+(\.\.?\/\S+\.bend)\s+as\s+\w+/gm)) visit(join(dirname(file), m[1]));
+    for (const p of importPaths(text)) if (!isHubImport(p)) visit(join(dirname(file), p));
     for (const m of text.matchAll(FOREIGN)) {
       if (!/\.(c|js)$/.test(m[1])) continue;
       const real = join(dirname(file), m[1]);

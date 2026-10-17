@@ -19,8 +19,9 @@ export type Law = {
   name: string; line: number; doc: string[]; binders: Binder[]; claimLines: string[]; exs: string[];
   proof?: { line: number; args: string[]; body: string[] };
 };
-export type Def = { name: string; line: number; header: string; body: string[] };
-export type Module = { file: string; name: string; text: string; laws: Law[]; defs: Def[]; types: { name: string; line: number }[]; imports: string[] };
+export type Def = { name: string; line: number; doc: string[]; header: string; body: string[] };
+/** `stray`: lines holding a `law` the strict parser did not take (indented, one-line); the tools reject them. */
+export type Module = { file: string; name: string; text: string; laws: Law[]; defs: Def[]; types: { name: string; line: number }[]; imports: string[]; stray: number[] };
 
 // Strip `#` comments and string/char literals so scans do not match inside them.
 export function stripCommentsAndStrings(src: string): string {
@@ -48,11 +49,11 @@ function parseBinder(line: string): Binder | null {
 }
 
 // 0-based index of the last physical line of a `def` header: the first line at paren depth 0 that ends with `:`.
-function headerEnd(lines: string[], start: number): number {
+function headerEnd(code: string[], start: number): number {
   let depth = 0;
-  for (let i = start; i < lines.length; i++) {
-    for (const ch of lines[i]) { if (ch === "(") depth++; else if (ch === ")") depth--; }
-    if (depth === 0 && /:\s*$/.test(lines[i])) return i;
+  for (let i = start; i < code.length; i++) {
+    for (const ch of code[i]) { if (ch === "(") depth++; else if (ch === ")") depth--; }
+    if (depth === 0 && /:\s*$/.test(code[i])) return i;
   }
   return start;
 }
@@ -60,7 +61,9 @@ function headerEnd(lines: string[], start: number): number {
 export function parseModule(file: string, source?: string): Module {
   const text = source ?? readFileSync(file, "utf8");
   const lines = text.split("\n");
-  const mod: Module = { file, name: basename(file, ".bend"), text, laws: [], defs: [], types: [], imports: [] };
+  // Headers are matched without comments, so `law foo: # note` is still a law; line numbers are kept.
+  const code = stripCommentsAndStrings(text).split("\n");
+  const mod: Module = { file, name: basename(file, ".bend"), text, laws: [], defs: [], types: [], imports: [], stray: [] };
   const lawByName = new Map<string, Law>();
   const docAbove = (i: number) => {
     const d: string[] = [];
@@ -74,9 +77,9 @@ export function parseModule(file: string, source?: string): Module {
     return b;
   };
   for (let i = 0; i < lines.length; i++) {
-    const l = lines[i];
+    const l = code[i];
     let m: RegExpMatchArray | null;
-    if ((m = l.match(/^import\s+(\S+)/))) mod.imports.push(m[1]);
+    if ((m = lines[i].match(/^import\s+(\S+)/))) mod.imports.push(m[1]);
     else if ((m = l.match(/^law\s+([A-Za-z_][A-Za-z0-9_.]*)\s*:\s*$/))) {
       const law: Law = { name: m[1], line: i + 1, doc: docAbove(i), binders: [], claimLines: [], exs: [] };
       for (const b of block(i)) {
@@ -90,18 +93,38 @@ export function parseModule(file: string, source?: string): Module {
     } else if ((m = l.match(/^(?:@unsafe\s+)?def\s+([A-Za-z_][A-Za-z0-9_.]*)(\??)\s*\((.*)$/))) {
       const name = m[1];
       const law = lawByName.get(name);
-      const end = headerEnd(lines, i);
+      const end = headerEnd(code, i);
       const body = block(end);
       if (law && !law.proof) {
         const args = (l.match(/^def\s+[^(]+\(([^)]*)\)/)?.[1] ?? "").split(",").map((s) => s.trim()).filter(Boolean);
         law.proof = { line: i + 1, args, body };
       } else {
-        mod.defs.push({ name, line: i + 1, header: lines.slice(i, end + 1).join("\n"), body });
+        mod.defs.push({ name, line: i + 1, doc: docAbove(i), header: lines.slice(i, end + 1).join("\n"), body });
       }
     } else if ((m = l.match(/^type\s+([A-Za-z_][A-Za-z0-9_.]*)/))) mod.types.push({ name: m[1], line: i + 1 });
+    else if (/(^|[^A-Za-z0-9_.])law\s+[A-Za-z_]/.test(l)) mod.stray.push(i + 1);
   }
   return mod;
 }
+
+/** The paths a file imports, read as bend's book_load reads them: the leading block of import, blank and `#` lines, trimmed. */
+export function importPaths(text: string): string[] {
+  const out: string[] = [];
+  for (const raw of text.replace(/^﻿/, "").split("\n")) {
+    const line = raw.trim();
+    if (line === "" || line.startsWith("#")) continue;
+    if (!/^import(\s|$)/.test(line)) break;
+    const m = /^import\s+(\S+)(?:\s+as\s+([A-Za-z_]\w*))?\s*(?:#.*)?$/.exec(line);
+    if (m !== null && m[2] !== undefined) out.push(m[1]);
+  }
+  return out;
+}
+
+/** A hub import (`0x…/` or `name@version/`), as opposed to a file of the importing package. */
+export const isHubImport = (p: string): boolean => /^0x[0-9a-fA-F]+\//.test(p) || /^[^/]*@[^/]*\//.test(p);
+
+/** A type-level def (`-> Data` / `-> Type`), which mathlib treats as a predicate. */
+export const isPredicate = (d: Def): boolean => /->\s*(Data|Type)\s*:\s*$/.test(stripCommentsAndStrings(d.header));
 
 /** A bad package path; each CLI reports it as a usage error (exit 2). */
 export class PkgError extends Error {}

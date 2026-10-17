@@ -79,6 +79,32 @@ describe("engine N (--native)", () => {
     expect(l.native.skip).toContain("build failed");
   }, T);
 
+  // A BEND_BIN wrapper logs when each real bend process starts and ends; with --jobs 1 no two may overlap.
+  test("--native builds share the --jobs limit with checker runs", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lawcheck-native-jobs-"));
+    const log = path.join(dir, "spawns.log");
+    const wrap = path.join(dir, "bend.sh");
+    fs.writeFileSync(wrap, `#!/bin/sh\necho "s $(date +%s%N)" >> '${log}'\n'${bendBin()}' "$@"\nrc=$?\necho "e $(date +%s%N)" >> '${log}'\nexit $rc\n`);
+    fs.chmodSync(wrap, 0o755);
+    const laws = ["Nat.add(n, 0n)", "Nat.add(0n, n)", "Nat.mul(n, 1n)", "Nat.mul(1n, n)"];
+    const file = path.join(dir, "four.bend");
+    fs.writeFileSync(file, ["import Base", "", ...laws.map((l, i) => `law l${i}:\n  for n: Nat\n  {${l} == n : Nat}\n`)].join("\n"));
+    const p = Bun.spawn([process.execPath, CLI, file, "--native", "--jobs", "1", "--max-instances", "5", "--json"], {
+      stdout: "pipe", stderr: "pipe", env: { ...process.env, BEND_BIN: wrap },
+    });
+    const [stdout, stderr] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text()]);
+    expect(stderr).toBe("");
+    expect(await p.exited).toBe(0);
+    for (const l of JSON.parse(stdout).laws) expect(l.native.checked).toBe(5);
+    const events = fs.readFileSync(log, "utf8").trim().split("\n").map((l) => l.split(" "))
+      .map(([k, t]) => ({ t: BigInt(t!), d: k === "s" ? 1 : -1 }))
+      .sort((a, b) => (a.t === b.t ? a.d - b.d : a.t < b.t ? -1 : 1));
+    let live = 0, peak = 0;
+    for (const e of events) { live += e.d; peak = Math.max(peak, live); }
+    expect(events.filter((e) => e.d === 1).length).toBeGreaterThanOrEqual(laws.length * 2);
+    expect(peak).toBe(1);
+  }, T);
+
   // No engine difference is known to reproduce on bend 2.0.27 (the #1026 `Bool.or`
   // construct agrees natively), so the disagreement path is tested by injection.
   test("INJECTED: the disagreement comparison flags mismatches (logic only)", () => {

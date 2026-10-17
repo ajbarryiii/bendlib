@@ -151,6 +151,10 @@ function succ(arg: Node[]): Node[] {
 
 export type Pattern = { src: string; items: Node[] };
 
+/** Auto mode's test: a standalone `_`, a bracket, `==`, or one dotted name such as `List.length` is a shape. */
+export const looksLikeShape = (q: string) =>
+  /(^|[^\p{L}\p{N}_])_($|[^\p{L}\p{N}_])|[(){}[\]]|==/u.test(q) || /^[\p{L}_][\p{L}\p{N}_]*(\.[\p{L}_][\p{L}\p{N}_]*)+$/u.test(q.trim());
+
 export function compile(query: string): Pattern {
   const items = normalize(parse(query));
   if (items.length === 0) throw new ShapeError("empty pattern");

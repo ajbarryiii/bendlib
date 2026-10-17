@@ -75,12 +75,47 @@ describe("finishPackage", () => {
     expect(p.modules[0].decls![0].unverified).toBeUndefined();
     expect(p.counts.proved).toBe(1);
   });
-  test("planted negative: a ?TODO in the sibling's proof keeps the law and the package open", () => {
+  test("planted negative: a ?TODO in the sibling's proof of b keeps b and the package open; a's proof there is its only other def and checks", () => {
     const p = pkg([mod("LAWS.bend", [law("a", false), law("b", false)], st("open", "2 TODOs found.")), mod("PROOF.bend", [], st("open", "1 TODO found."))]);
     finishPackage(p, new Map([["PROOF.bend", ["LAWS.bend#a", "LAWS.bend#b"]]]), text);
-    expect(p.modules[0].decls!.map((d) => [d.name, d.proved, d.holes ?? false])).toEqual([["a", false, false], ["b", false, true]]);
+    expect(p.modules[0].decls!.map((d) => [d.name, d.proved, d.holes ?? false])).toEqual([["a", true, false], ["b", false, true]]);
     expect(p.modules[0].settled).toBeUndefined();
     expect(p.status).toBe("open");
+  });
+  test("planted negative: an open sibling whose TODOs are not all its own holes proves nothing", () => {
+    const p = pkg([mod("LAWS.bend", [law("a", false), law("b", false)], st("open", "2 TODOs found.")), mod("PROOF.bend", [], st("open", "2 TODOs found."))]);
+    finishPackage(p, new Map([["PROOF.bend", ["LAWS.bend#a", "LAWS.bend#b"]]]), text);
+    expect(p.modules[0].decls!.map((d) => [d.name, d.proved])).toEqual([["a", false], ["b", false]]);
+  });
+  // Counts bend 2.0.37 printed for scratch files: 1 open goal for a proved law beside one without a def,
+  // and 3 when a proof calls a helper with two holes beside a law without a def.
+  const OWN = "import Base\n\nlaw a:\n  {x == x : Nat}\n\ndef a():\n  {==}\n\nlaw b:\n  {x == x : Nat}\n";
+  test("a proved law in an `open` file is proved, not unverified", () => {
+    const p = pkg([mod("m.bend", [law("a", true, 6), law("b", false)], st("open", "1 TODO found."))]);
+    finishPackage(p, new Map(), () => OWN);
+    expect(p.modules[0].decls![0].proved).toBe(true);
+    expect(p.modules[0].decls![0].unverified).toBeUndefined();
+    expect(p.counts).toMatchObject({ laws: 2, proved: 1 });
+    expect(p.status).toBe("open");
+  });
+  test("planted negative: a proof that calls a def with a ?hole is unverified", () => {
+    const src = "import Base\n\ndef helper(x):\n  match x:\n    case 0n:\n      ?TODO\n    case 1n+p:\n      ?TODO\n\nlaw a:\n  {x == x : Nat}\n\ndef a(x):\n  helper(x)\n\nlaw b:\n  {x == x : Nat}\n";
+    const p = pkg([mod("m.bend", [law("a", true, 13), law("b", false)], st("open", "3 TODOs found."))]);
+    finishPackage(p, new Map(), () => src);
+    expect(p.modules[0].decls![0]).toMatchObject({ proved: false, unverified: "open" });
+  });
+  test("planted negative: more TODOs than this file's holes and def-less laws (an import's) leave its proofs unverified", () => {
+    const p = pkg([mod("m.bend", [law("a", true, 6), law("b", false)], st("open", "2 TODOs found."))]);
+    finishPackage(p, new Map(), () => OWN);
+    expect(p.modules[0].decls![0]).toMatchObject({ proved: false, unverified: "open" });
+  });
+  test("a LAWS file that proves some laws and gets the rest from a checking sibling settles as checking", () => {
+    const sib = "import Base\nimport ./LAWS.bend as Laws\n\ndef Laws.b():\n  {==}\n";
+    const p = pkg([mod("LAWS.bend", [law("a", true, 6), law("b", false)], st("open", "1 TODO found.")), mod("PROOF.bend", [], st("checks", "ALL PROOFS CHECK"))]);
+    finishPackage(p, new Map([["PROOF.bend", ["LAWS.bend#b"]]]), (path) => (path === "PROOF.bend" ? sib : OWN));
+    expect(p.modules[0].decls!.map((d) => [d.name, d.proved])).toEqual([["a", true], ["b", true]]);
+    expect(p.modules[0].settled).toBe("checks");
+    expect(p.status).toBe("checks");
   });
   test("planted negative: a sibling that times out does not prove anything", () => {
     const p = pkg([mod("LAWS.bend", [law("a", false)], st("open", "1 TODO found.")), mod("PROOF.bend", [], st("timeout"))]);

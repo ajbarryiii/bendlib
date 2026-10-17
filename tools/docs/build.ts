@@ -65,14 +65,20 @@ function parseArgs(argv: string[]): Args {
   return a;
 }
 
-/** A cached status is stale when absent, a timeout or memory limit with more room now, an address-space abort, or a pre-probe sandbox failure. */
+/** A cached status is stale when absent, a timeout or memory limit with more room now, an address-space abort, a pre-probe sandbox failure, or a hub fetch failure. */
 export function stale(c: FileStatus | undefined, timeout: number, rssMb = Infinity): boolean {
   return c === undefined
     || (c.class === "timeout" && c.seconds < timeout - 1)
     || (c.class === "limit" && (c.rssMb ?? 0) < rssMb)
     || (c.class === "fails" && /^ASSERTION FAILED: MemoryExhaustion\b/.test(c.detail))
-    || (c.class === "fails" && /^bwrap: /.test(c.detail));
+    || (c.class === "fails" && /^bwrap: /.test(c.detail))
+    // bend words a missing hub file and a network failure alike, so a fetch failure is re-tried every build.
+    || (c.class === "fails" && /a file at https?:\/\//.test(c.detail));
 }
+
+/** True when a re-check reached the cached verdict again; only its time may differ (a timeout's time is its budget, so it always counts). */
+export const sameVerdict = (a: FileStatus | undefined, b: FileStatus) =>
+  a !== undefined && a.class !== "timeout" && a.class === b.class && a.summary === b.summary && a.detail === b.detail && a.rssMb === b.rssMb;
 
 const log = (s: string) => console.error(s);
 const secs = (t0: number) => ((performance.now() - t0) / 1000).toFixed(1) + " s";
@@ -228,8 +234,10 @@ async function main() {
     await pool(todo, args.jobs, async ({ hash, path }) => {
       const s = await checkFile(join(lib, hash, path), { bendLib: lib, timeoutSec: args.timeout, memMb: args.memMb, rssMb: args.rssMb, cwd: join(lib, hash) });
       // A sandbox failure is not a file status: never cache it, so the next run retries the check.
+      const key = statusKey(hash, path, compiler), old = cache[key];
       if (s.class === "sandbox") sandboxFails++;
-      else cache[statusKey(hash, path, compiler)] = s;
+      // An unchanged verdict keeps its entry, so status.json (the docs cache key) changes only with a verdict.
+      else if (!sameVerdict(old, s)) cache[key] = s;
       checkedNew++;
       if (++done % 50 === 0) { log(`check: ${done}/${todo.length}`); writeStatusCache(statusFile, cache); }
     });

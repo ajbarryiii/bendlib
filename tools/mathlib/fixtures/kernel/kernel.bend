@@ -7,6 +7,7 @@ type Box is Data:
 def own_le(x: Nat, y: Nat) -> Bool:
   Nat.is_le(x, y)
 
+# A kernel predicate that matches and calls its own defs.
 def kernel_pred(+xs: List<&2, Nat>) -> Data:
   match xs:
     case Nil{}:

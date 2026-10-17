@@ -1,4 +1,5 @@
-# bend-mathlib/list.bend: List lemmas (append, reverse, length, take, drop, map, fold, filter).
+# bend-mathlib/list.bend: List lemmas (append, reverse, length, take, drop, map, fold, filter, zip,
+# head, last, get, all, any, find, contains, mem, sorted_by).
 import Base
 import ./nat.bend as MNat
 import ./bool.bend as MBool
@@ -426,7 +427,7 @@ def length_range(n):
   %Equal.sym(Nat, List.length(&2, Nat, List.range.go(n, Nil{})), Nat.add(n, 0n), internal_length_range_go(n, Nil{})) : {_ == n : Nat}
   MNat.add_zero(n)
 
-# Zipping two lists gives the length of the shorter one.
+# A zip is as long as the shorter of the two lists.
 law length_zip:
   for -a: Quant
   for -A: Kind(a)
@@ -528,7 +529,7 @@ law map_reverse:
 def map_reverse(A, B, f, xs):
   internal_map_reverse_go(~A, ~B, ~f, xs, Nil{})
 
-# Proofs about all, any and find unfold their cons case only through these (PLAN F39).
+# The cons case of all, any, find and contains as lemmas, so a change to their Base definitions stays in one place (PLAN F39).
 def internal_all_cons(~a: Quant, ~A: Kind(a), ~f: A -> Bool, h: A, t: List<a, A>) -> {Bool.and(f(h), List.all(~a, ~A, ~f, t)) == List.all(~a, ~A, ~f, h <> t) : Bool}:
   {==}
 
@@ -1240,7 +1241,7 @@ def any_filter(A, p, q, xs):
       %any_filter(~A, ~p, ~q, t) : {List.any(~&2, ~A, ~q, List.filter.put(A, h, List.filter(~A, ~p, t), p(h))) == Bool.or(Bool.and(p(h), q(h)), _) : Bool}
       internal_any_filter_put(~A, ~q, h, List.filter(~A, ~p, t), p(h))
 
-# The proof of all_map unfolds List.all, so it lives here with the other unfolding lemmas (PLAN F39).
+# Unfolds List.all directly, so its proof depends on Base's definition (PLAN F39).
 def internal_all_map(~A: Type, ~B: Type, ~f: A -> B, ~p: B -> Bool, xs: List<A>) -> {List.all(~&1, ~B, ~p, List.map(~A, ~B, ~f, xs)) == List.all(~&1, ~A, ~(x => p(f(x))), xs) : Bool}:
   match xs:
     case Nil{}:
@@ -2152,7 +2153,7 @@ law length_range_sym:
 def length_range_sym(n):
   Equal.sym(Nat, List.length(&2, Nat, List.range(n)), n, length_range(n))
 
-# Zipping two lists gives the length of the shorter one, reversed to rewrite toward the simple side.
+# A zip is as long as the shorter of the two lists, reversed to rewrite toward the simple side.
 law length_zip_sym:
   for -a: Quant
   for -A: Kind(a)

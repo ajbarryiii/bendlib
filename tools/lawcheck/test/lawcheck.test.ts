@@ -671,7 +671,9 @@ describe("non-plain target paths (bend >= 2.0.28 imports only plain names)", () 
     expect(c.stdout).not.toContain(path.join(rep.tmpDir, "root"));
   }, T);
 
-  test("an import that climbs above a non-plain component keeps the located error", async () => {
+  // This layout used to end in the located `plain names` error; staging the root with its imports
+  // made absolute now checks it.
+  test("an import that climbs above a non-plain component is checked via a staged copy", async () => {
     const base = fs.mkdtempSync(path.join(os.tmpdir(), "lawcheck-nonplain-climb-"));
     const dir = path.join(base, "4d2_vn8j", "x");
     fs.mkdirSync(dir, { recursive: true });
@@ -687,7 +689,127 @@ describe("non-plain target paths (bend >= 2.0.28 imports only plain names)", () 
       "",
     ].join("\n"));
     const r = await run(root, "--jobs", "4");
-    expect(r.code).toBe(2);
-    expect(r.stdout).toContain("plain names");
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("1 laws: 1 ✓ · 0 ✗ · 0 ~ · 0 !");
+    expect(r.stdout).not.toContain("plain names");
+  }, T);
+
+  test("a target whose basename is not plain (1st.bend, x.y.bend) is checked under a plain copy", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lawcheck-names-"));
+    const src = ["import Base", "", "law add_zero:", "  for x: Nat", "  {Nat.add(x, 0n) == x : Nat}", "",
+      "law bad:", "  for x: Nat", "  {Nat.add(x, 1n) == x : Nat}", ""].join("\n");
+    for (const name of ["1st.bend", "x.y.bend"]) {
+      const file = path.join(dir, name);
+      fs.writeFileSync(file, src);
+      expect(importablePath(file)).toBe(false);
+      const r = await run(file, "--jobs", "4", "--max-instances", "10", "--json");
+      expect(r.code).toBe(1);
+      const rep = JSON.parse(r.stdout);
+      expect(rep.file).toBe(file);
+      expect(rep.laws.map((l: any) => [l.name, l.status])).toEqual([["add_zero", "pass"], ["bad", "fail"]]);
+    }
+  }, T);
+
+  test("--impl swaps an import that sits under a non-plain directory", async () => {
+    const dir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "lawcheck-implnp-")), "-home-x", "4d2");
+    fs.mkdirSync(dir, { recursive: true });
+    for (const f of ["laws_lib.bend", "lib_ok.bend", "lib_buggy.bend"]) fs.copyFileSync(path.join(FX, f), path.join(dir, f));
+    const ok = await run(path.join(dir, "laws_lib.bend"), "--impl", path.join(dir, "lib_ok.bend"), "--jobs", "4", "--json");
+    expect(ok.stderr).toBe("");
+    expect(ok.code).toBe(0);
+    expect(JSON.parse(ok.stdout).laws.every((l: any) => l.status === "pass")).toBe(true);
+    const bad = await run(path.join(dir, "laws_lib.bend"), "--impl", path.join(dir, "lib_buggy.bend"), "--jobs", "4", "--json");
+    expect(bad.code).toBe(1);
+    const app = JSON.parse(bad.stdout).laws.find((l: any) => l.name === "app_size");
+    expect(app.status).toBe("fail");
+    expect(binds(app)).toEqual({ xs: "M.Push{0n, M.Bot{}}", ys: "M.Bot{}" });
+  }, T);
+});
+
+describe("catalog budget, exs witnesses, tool errors, bisection", () => {
+  const tmpFile = (name: string, lines: string[]) => {
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "lawcheck-rv-")), name);
+    fs.writeFileSync(file, lines.join("\n") + "\n");
+    return file;
+  };
+
+  // 4^3 catalog contexts and a budget of 50: a prefix of the product never reached f = double
+  // with a growing g, the only contexts that break the law.
+  test("a budget below the catalog product still meets every pair of catalog entries", async () => {
+    const file = tmpFile("cat3.bend", ["import Base", "", "law two_used:", "  for ~f: Nat -> Nat", "  for ~g: Nat -> Nat",
+      "  for ~h: Nat -> Nat", "  for x: Nat", "  {Nat.is_le(f(g(1n)), 3n) == True{} : Bool}"]);
+    const { code, report } = await json(file, "--max-instances", "50", "--jobs", "4");
+    expect(code).toBe(1);
+    const l = law(report, "two_used");
+    expect(l.status).toBe("fail");
+    expect(l.instances).toBe(50);
+    expect(l.counterexample.bindings.find((b: any) => b.name === "f").value).toBe("(lc_x => Nat.double(lc_x))");
+  }, T);
+
+  test("a proposition-typed template binder is skipped with that reason", async () => {
+    const file = tmpFile("prop.bend", ["import Base", "", "law op_assoc4:", "  for ~op: Nat -> Nat -> Nat",
+      "  for ~assoc: @x: Nat -> @y: Nat -> @z: Nat -> {op(op(x, y), z) == op(x, op(y, z)) : Nat}",
+      "  for a: Nat", "  {op(op(a, a), a) == op(a, op(a, a)) : Nat}"]);
+    const { code, report } = await json(file, "--jobs", "4");
+    expect(code).toBe(0);
+    const l = law(report, "op_assoc4");
+    expect(l.status).toBe("skip");
+    expect(l.reason).toMatch(/^proposition-typed template binder ~assoc: /);
+  }, T);
+
+  test("an exs witness search tries each distinct value once", async () => {
+    const file = tmpFile("exs.bend", ["import Base", "", "law exs_bool:", "  exs b: Bool", "  {Bool.and(b, False{}) == True{} : Bool}"]);
+    const { code, report } = await json(file, "--jobs", "4");
+    expect(code).toBe(0);
+    expect(law(report, "exs_bool").reason).toBe("no witness found in 2 candidates");
+    expect(report.checkerRuns).toBeLessThanOrEqual(2);
+  }, T);
+
+  test("an exs witness of a type with no finite value is a skip, not a crash", async () => {
+    const file = tmpFile("inf.bend", ["import Base", "", "type Inf is Data:", "  Mk{x: Inf}", "", "def k(i: Inf) -> Nat:", "  0n", "",
+      "law exs_inf:", "  exs i: Inf", "  {k(i) == 0n : Nat}"]);
+    const r = await run(file, "--jobs", "4");
+    expect(r.stderr).toBe("");
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("~ exs_inf  skipped: `exs` witness i: no generator for type Inf");
+  }, T);
+
+  test("a tool error exits 2 with a typed error, under --json on stdout", async () => {
+    const file = path.join(FX, "correct.bend");
+    for (const args of [[file], ["mutate", file]]) {
+      const j = await runEnv({ BEND_BIN: "/nonexistent/bend" }, ...args, "--json");
+      expect(j.code).toBe(2);
+      expect(j.stderr).toBe("");
+      const e = JSON.parse(j.stdout).error;
+      expect(e.kind).toBe("error");
+      expect(e.message).toContain("/nonexistent/bend");
+      const t = await runEnv({ BEND_BIN: "/nonexistent/bend" }, ...args);
+      expect(t.code).toBe(2);
+      expect(t.stdout).toBe("");
+      expect(t.stderr).toMatch(/^lawcheck: .*\/nonexistent\/bend/);
+      expect(t.stderr).not.toMatch(/\n\s+at /);
+    }
+  }, T);
+
+  test("an empty numeric flag value is a usage error, not 0", async () => {
+    for (const flag of ["--size", "--seed"]) {
+      const r = await run(path.join(FX, "correct.bend"), flag, "");
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain(`${flag} needs an integer`);
+    }
+  }, T);
+
+  // n = 0 overflows the checker (9^9 in unary), so the first batch is bisected; every other
+  // instance is undecidable, and the halves must still stop at the first one.
+  test("bisecting an overflowing batch still stops at the first undecidable instance", async () => {
+    const file = tmpFile("und.bend", ["import Base", "", "def big_or_open(n: Nat) -> Type:", "  match n:", "    case 0n:",
+      "      {Nat.pow(9n, 9n) == 0n : Nat}", "    case 1n+p:", "      Either<&1, &1, {p == p : Nat}, {p == p : Nat}>", "",
+      "law und:", "  for n: Nat", "  big_or_open(n)"]);
+    const { report } = await json(file, "--max-instances", "32", "--jobs", "4");
+    const l = law(report, "und");
+    expect(l.status).toBe("skip");
+    expect(l.reason).toMatch(/^not decidable by evaluation/);
+    expect(l.instances).toBeGreaterThan(16);
+    expect(report.checkerRuns).toBeLessThanOrEqual(16);
   }, T);
 });

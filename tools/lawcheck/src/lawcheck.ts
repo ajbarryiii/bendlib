@@ -6,7 +6,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { BendReadError, decls, load, printedName, show, type Decl, type Loaded } from "../../reader/index.ts";
 import { stripCommentsAndStrings } from "../../mathlib/lib.ts";
-import { bendBin, cleanCheck, evaluate, evaluateAll, locate, ModuleError, overflowed, runBatch, type Engine, type Item, type Outcome } from "./checker.ts";
+import { bendBin, cleanCheck, evaluate, evaluateAll, locate, ModuleError, overflowed, runBatch, slot, type Engine, type Item, type Outcome } from "./checker.ts";
 import { defSpan, mutants } from "./mutate.ts";
 import { mentions, rewrite, Shadowed, showTerm, splitEquation, type TermDecl } from "./terms.ts";
 import { parseTy, showTy, substTy, type Ty } from "./types.ts";
@@ -213,6 +213,7 @@ function plan(L: Loaded, d: Decl, predicates: Map<string, PredStmt | null>, U: U
     const head = applicationHead(s);
     return head !== null && predicates.has(head);
   };
+  const isProposition = (s: string) => s.startsWith("{") || s === "Empty" || isPredicateApp(s);
   const sigOf = (s: string): PremSig => {
     if (s.trim().startsWith("{")) return { k: "eq" };
     const head = applicationHead(s);
@@ -227,8 +228,8 @@ function plan(L: Loaded, d: Decl, predicates: Map<string, PredStmt | null>, U: U
     const tmpl = b.quant === "template";
     if (tmpl && t === "Quant") { p.quantParams.push(b.name); continue; }
     if (tmpl && /^(Type|Data|Kind\(.*\))$/.test(t)) { p.typeParams.push(b.name); continue; }
+    if (tmpl && isProposition(splitArrow(t).pop()!.trim())) throw new Skip(`proposition-typed template binder ~${b.name}: ${t}`);
     if (tmpl && t.includes("->")) { p.funs.push(parseFun(b.name, t)); continue; }
-    if (tmpl && t.startsWith("{")) throw new Skip("template hypothesis");
     if (t === "Quant") p.quantParams.push(b.name);
     else if (/^(Type|Data|Kind\(.*\))$/.test(t)) p.typeParams.push(b.name);
     else if (t.startsWith("{")) { p.premises.push(t); p.premiseSigs.push(sigOf(t)); premiseNames.push(b.name); }
@@ -520,12 +521,43 @@ function catalogCombos(perFun: string[][], r: Rng): string[][] {
   return out;
 }
 
+// Greedy all-pairs order: each next combo covers the most unseen (binder, entry) pairs, then the
+// most unseen single entries, so a budget below the product still meets every pair it can.
+function coverageOrder(combos: string[][], r: Rng): string[][] {
+  const pairs = new Set<string>(), singles = new Set<string>();
+  const keys = (c: string[]) => {
+    const ps: string[] = [], ss = c.map((x, i) => `${i}\u0000${x}`);
+    for (let i = 0; i < c.length; i++) for (let j = i + 1; j < c.length; j++) ps.push(`${ss[i]}\u0001${ss[j]}`);
+    return { ps, ss };
+  };
+  const rest = combos.map((c) => ({ c, k: keys(c), tie: r() }));
+  const out: string[][] = [];
+  while (rest.length > 0) {
+    let best = 0, bestScore = -1;
+    rest.forEach((x, i) => {
+      const score = x.k.ps.filter((k) => !pairs.has(k)).length * 1000 + x.k.ss.filter((k) => !singles.has(k)).length;
+      if (score > bestScore || (score === bestScore && x.tie < rest[best].tie)) { best = i; bestScore = score; }
+    });
+    const [pick] = rest.splice(best, 1);
+    for (const k of pick.k.ps) pairs.add(k);
+    for (const k of pick.k.ss) singles.add(k);
+    out.push(pick.c);
+  }
+  return out;
+}
+
 function instances(p: Plan, U: Universe, o: Options, r: Rng): Inst[] {
   const choices = p.typeParams.length ? TYPE_CHOICES : [""];
-  const ctxs: { choice: string; funs: string[] }[] = [];
-  for (const choice of choices) {
-    const perFun = p.funs.map((f) => CATALOG[substSig(f, choice, p.typeParams)]);
-    for (const funs of catalogCombos(perFun, r)) ctxs.push({ choice, funs });
+  const perChoice = choices.map((choice) => catalogCombos(p.funs.map((f) => CATALOG[substSig(f, choice, p.typeParams)]), r));
+  let ctxs: { choice: string; funs: string[] }[] = choices.flatMap((choice, i) => perChoice[i].map((funs) => ({ choice, funs })));
+  // Fewer instances than contexts would give every later context a budget of 0, so pick the
+  // contexts to keep by coverage, alternating the type choices, instead of keeping a prefix.
+  if (ctxs.length > o.maxInstances) {
+    const ordered = perChoice.map((cs) => coverageOrder(cs, r));
+    ctxs = [];
+    for (let k = 0; ctxs.length < o.maxInstances; k++) {
+      choices.forEach((choice, i) => { if (k < ordered[i].length && ctxs.length < o.maxInstances) ctxs.push({ choice, funs: ordered[i][k] }); });
+    }
   }
   const all: Inst[] = [];
   ctxs.forEach((ctx, ci) => {
@@ -586,66 +618,68 @@ export function scratchBase(): string {
   return fs.existsSync("/tmp") && "/tmp".split("/").slice(1).every((s) => PLAIN_SEG.test(s)) ? "/tmp" : os.tmpdir();
 }
 
-/** Deepest common ancestor directory of the absolute `dirs`. */
-function commonDir(dirs: string[]): string | null {
-  if (dirs.length === 0) return null;
-  const split = dirs.map((d) => d.split("/"));
-  const out: string[] = [];
-  for (let i = 0; ; i++) {
-    const seg = split[0]![i];
-    if (seg === undefined || split.some((s) => s[i] !== seg)) break;
-    out.push(seg);
-  }
-  return out.join("/") || "/";
-}
+const PATH_IMPORT = /^import\s+((?:\.{1,2})?\/\S+\.bend)(\s+as\s+\S+)?\s*$/;
 
-/** Whether a relative layout component list is importable (last component names a `.bend`). */
-function plainRel(rel: string): boolean {
-  const segs = rel.split("/");
-  return segs.every((s, i) => (i === segs.length - 1 ? PLAIN_BEND.test(s) : PLAIN_SEG.test(s)));
-}
-
-/** The root and every file reachable from it by a relative `./`/`../` import, in load order. */
-function relativeClosure(L: Loaded): string[] {
-  const byPath = new Map(L.files.map((f) => [f.path, f] as const));
-  const out: string[] = [];
-  const seen = new Set<string>();
-  const walk = (p: string) => {
-    const f = byPath.get(p);
-    if (f === undefined || seen.has(p)) return;
-    seen.add(p);
-    out.push(p);
-    for (const spec of localImports(f.text)) {
-      const abs = path.resolve(path.dirname(p), spec);
-      walk(fs.existsSync(abs) ? fs.realpathSync(abs) : abs);
-    }
-  };
-  walk(L.file);
+/** The `./`, `../` and absolute import lines of `text`: line index, spec, and the ` as X` suffix. */
+function pathImports(text: string): { i: number; spec: string; as: string }[] {
+  const out: { i: number; spec: string; as: string }[] = [];
+  text.split("\n").forEach((l, i) => {
+    const m = PATH_IMPORT.exec(l.trim());
+    if (m !== null) out.push({ i, spec: m[1], as: m[2] ?? "" });
+  });
   return out;
 }
 
-/** Copies `files` under `<tmp>/root` preserving layout; null when the layout cannot be made plain. */
-function plainCopies(tmp: string, files: string[]): Map<string, string> | null {
-  const real = [...new Set(files.map((f) => (fs.existsSync(f) ? fs.realpathSync(f) : f)))];
-  if (real.every(importablePath)) return null;
-  const anchor = commonDir(real.map((f) => path.dirname(f)));
-  if (anchor === null) return null;
-  const rels = real.map((f) => path.relative(anchor, f).split(path.sep).join("/"));
-  if (rels.some((r) => !plainRel(r))) return null;
-  const dir = path.join(tmp, "root");
-  const map = new Map<string, string>();
-  for (let i = 0; i < real.length; i++) {
-    const to = path.join(dir, ...rels[i]!.split("/"));
-    fs.mkdirSync(path.dirname(to), { recursive: true });
-    fs.copyFileSync(real[i]!, to);
-    map.set(real[i]!, to);
-  }
-  return map;
+const realOf = (p: string) => (fs.existsSync(p) ? fs.realpathSync(p) : p);
+
+/** Scratch copies (under `root`) of files bend cannot import where they are, keyed by realpath. */
+type Stage = { root: string; copies: Map<string, string>; done: Map<string, string> };
+
+const newStage = (tmp: string): Stage => ({ root: path.join(tmp, "root"), copies: new Map(), done: new Map() });
+
+// No `-` either: a copy's namespace is its path below the batch directory, and there a `-` would
+// read as subtraction in printed terms.
+const plainName = (s: string) => {
+  const t = s.replace(/[^A-Za-z0-9_]/g, "_");
+  return /^[A-Za-z_]/.test(t) ? t : "_" + t;
+};
+
+/** `text` with each path import made absolute from `dir` and pointed at an importable file; `keep` specs stay as written. */
+function stagedImports(S: Stage, text: string, dir: string, keep: (spec: string) => boolean = () => false): string {
+  const lines = text.split("\n");
+  for (const x of pathImports(text)) if (!keep(x.spec)) lines[x.i] = `import ${stage(S, path.resolve(dir, x.spec))}${x.as}`;
+  return lines.join("\n");
+}
+
+/** An importable path for `file`: itself when it and all it imports by path are plain (PLAN F3), else a copy. */
+function stage(S: Stage, file: string): string {
+  const real = realOf(file);
+  const known = S.done.get(real);
+  if (known !== undefined) return known;
+  S.done.set(real, real);
+  if (!fs.existsSync(real) || !fs.statSync(real).isFile()) return real;
+  const text = fs.readFileSync(real, "utf8");
+  const dir = path.dirname(real);
+  const plain = importablePath(real) && pathImports(text).every((x) => {
+    const to = realOf(path.resolve(dir, x.spec));
+    return stage(S, to) === to;
+  });
+  if (plain) return real;
+  const segs = real.split("/").slice(1);
+  const stem = plainName(segs.pop()!.replace(/\.bend$/, ""));
+  const at = path.join(S.root, ...segs.map(plainName));
+  const taken = new Set(S.copies.values());
+  let to = path.join(at, `${stem}.bend`);
+  for (let k = 2; taken.has(to); k++) to = path.join(at, `${stem}_${k}.bend`);
+  fs.mkdirSync(at, { recursive: true });
+  fs.writeFileSync(to, stagedImports(S, text, dir));
+  S.copies.set(real, to);
+  S.done.set(real, to);
+  return to;
 }
 
 /** Maps a scratch copy path back to the user's original path in checker output. */
-function unmapCopies(s: string, copies: Map<string, string> | null): string {
-  if (copies === null) return s;
+function unmapCopies(s: string, copies: Map<string, string>): string {
   let out = s;
   for (const [orig, copy] of [...copies].sort((a, b) => b[1].length - a[1].length)) out = out.split(copy).join(orig);
   return out;
@@ -684,7 +718,10 @@ function aliasMap(L: Loaded, batchDir: string, pathFor: (p: string) => string = 
   const names = (s: string) => rewrite(s, new Map(), (id) => nameOut(unalias(id)), false);
   // A name the batch has no alias for prints under its namespace relative to the batch's directory
   // (F3); a hub module keeps its `0x…` name, so it needs no back-map entry (README).
-  const rel = (file: string) => path.relative(batchDir, file).replace(/\.bend$/, "") + ".";
+  const rel = (file: string) => {
+    const at = pathFor(file);
+    return path.relative(batchDir, at.startsWith("/") ? at : file).replace(/\.bend$/, "") + ".";
+  };
   const back: [string, string][] = [[rel(L.file), ""]];
   for (const [ns, { file }] of nsToAlias) if (!ns.startsWith("0x")) back.push([rel(file), ns + "."]);
   back.sort((a, b) => b[0].length - a[0].length);
@@ -716,41 +753,28 @@ function userAliases(L: Loaded): Map<string, string> {
   return out;
 }
 
-function rootFor(file: string, impl: string | undefined, tmp: string): string {
+function rootFor(file: string, impl: string | undefined, tmp: string, S: Stage): string {
   if (impl === undefined) return file;
   const dir = path.dirname(path.resolve(file));
   const implAbs = path.resolve(impl);
   if (!fs.existsSync(implAbs)) throw new UsageError(`--impl: no such file: ${impl}`);
-  const lines = fs.readFileSync(file, "utf8").split("\n");
-  const locals = lines.map((l, i) => ({ i, m: /^import\s+(\.{1,2}\/\S+\.bend)(\s+as\s+\S+)?\s*$/.exec(l.trim()) })).filter((x) => x.m !== null);
-  let target = locals.filter((x) => path.basename(x.m![1]) === path.basename(implAbs));
+  const text = fs.readFileSync(file, "utf8");
+  const lines = text.split("\n");
+  const locals = pathImports(text).filter((x) => x.spec.startsWith("."));
+  let target = locals.filter((x) => path.basename(x.spec) === path.basename(implAbs));
   if (target.length === 0 && locals.length === 1) target = locals;
   if (target.length !== 1) throw new UsageError(`--impl: cannot tell which import of ${file} to replace (need one local import named ${path.basename(implAbs)})`);
-  for (const x of locals) {
-    const abs = x === target[0] ? implAbs : path.resolve(dir, x.m![1]);
-    lines[x.i] = `import ${abs}${x.m![2] ?? ""}`;
-  }
-  const out = path.join(tmp, "impl_" + path.basename(file));
+  for (const x of locals) lines[x.i] = `import ${stage(S, x === target[0] ? implAbs : path.resolve(dir, x.spec))}${x.as}`;
+  const out = path.join(tmp, "impl_" + plainName(path.basename(file).replace(/\.bend$/, "")) + ".bend");
   fs.writeFileSync(out, lines.join("\n"));
   return out;
 }
 
-/** Copy a whitespace-path root into `tmp` under a safe basename (bend import lines are unquoted). */
-function safeRoot(file: string, tmp: string): string {
-  const real = fs.existsSync(file) ? fs.realpathSync(file) : file;
-  if (!/[\s"']/.test(real)) return file;
-  if (!fs.statSync(real).isFile()) return file;
-  const dir = path.dirname(real);
-  const lines = fs.readFileSync(real, "utf8").split("\n");
-  lines.forEach((l, i) => {
-    const m = /^import\s+(\.{1,2}\/\S+\.bend)(\s+as\s+\S+)?\s*$/.exec(l.trim());
-    if (m === null) return;
-    const abs = path.resolve(dir, m[1]);
-    lines[i] = `import ${fs.existsSync(abs) ? fs.realpathSync(abs) : abs}${m[2] ?? ""}`;
-  });
-  const out = path.join(tmp, `root_${path.basename(real).replace(/[^\w.-]/g, "_")}`);
-  fs.writeFileSync(out, lines.join("\n"));
-  return out;
+/** A whitespace-path root, copied (bend import lines are unquoted) before it is loaded. */
+function safeRoot(file: string, S: Stage): string {
+  const real = realOf(file);
+  if (!/[\s"']/.test(real) || !fs.statSync(real).isFile()) return file;
+  return stage(S, real);
 }
 
 export class UsageError extends Error {}
@@ -894,7 +918,7 @@ async function runNative(E: Engine, src: string): Promise<string[] | string> {
   const file = path.join(dir, `h${n}.bend`);
   const bin = path.join(dir, `h${n}`);
   fs.writeFileSync(file, src);
-  const run = async (args: string[]): Promise<{ out: string; code: number | null; timedOut: boolean }> => {
+  const run = (args: string[]): Promise<{ out: string; code: number | null; timedOut: boolean }> => slot(E.jobs, async () => {
     const p = Bun.spawn(args, { env: { ...process.env, BEND_NO_TELEMETRY: "1" }, stdout: "pipe", stderr: "pipe" });
     let timedOut = false;
     const timer = setTimeout(() => { timedOut = true; p.kill(); }, E.timeoutMs);
@@ -902,7 +926,7 @@ async function runNative(E: Engine, src: string): Promise<string[] | string> {
     const code = await p.exited;
     clearTimeout(timer);
     return { out: o + e, code, timedOut };
-  };
+  });
   const b = await run([E.bend, file, "-o", bin]);
   if (b.timedOut) return `native build timed out after ${E.timeoutMs} ms`;
   if (b.code !== 0) return `native build failed: ${E.display(b.out.trim())}`;
@@ -916,13 +940,14 @@ export async function lawcheck(file: string, o: Options): Promise<Report> {
   const abs = path.resolve(file);
   if (!fs.existsSync(abs)) throw new UsageError(`no such file: ${file}`);
   const tmp = o.tmpDir ?? fs.mkdtempSync(path.join(scratchBase(), "lawcheck-"));
-  const root = safeRoot(rootFor(abs, o.impl, tmp), tmp);
+  const S = newStage(tmp);
+  const root = safeRoot(rootFor(abs, o.impl, tmp, S), S);
   const L = await load(root);
   validate(L);
   // a file inside BEND_LIB keeps its hub namespace, so its local imports resolve to the same modules (bend-hxq)
   const hub = hubSpec(L.file);
-  const copies = importablePath(L.file) || hub !== null ? null : plainCopies(tmp, relativeClosure(L));
-  const pathFor = (p: string) => (p === L.file && hub !== null ? hub : copies?.get(p) ?? p);
+  const pathFor = (p: string) => (p === L.file && hub !== null ? hub : stage(S, p));
+  const copies = S.copies;
   const own = decls(L, { scope: "own" });
   const allDecls = decls(L, { scope: "all" });
   const predicates = new Map<string, PredStmt | null>();
@@ -1103,16 +1128,25 @@ async function checkLaw(L: Loaded, d: Decl, li: number, o: Options, U: Universe,
     return null;
   };
 
-  // The `exs` witness space: the generated values of each witness type, in product (capped).
+  // The `exs` witness space: the distinct generated values of each witness type, in product (capped).
   const witnessCombos = (inst: Inst): { name: string; q: string; n: string }[][] => {
     const envTy = new Map<string, Ty>();
     for (const [a, t] of inst.types) envTy.set(a, { t: "app", head: t, args: [], paren: false });
     const cap = Math.min(o.maxInstances, 64);
     const perW = p.exs.map((e) => {
       const ty = substTy(e.ty, envTy);
-      const out = U.enumerate(ty, o.size).slice(0, cap);
-      while (out.length < cap) out.push(U.random(ty, Math.max(o.size, 3), r));
-      return out.map((v) => ({ name: e.name, q: render(v, qualify), n: render(v, nameOut) }));
+      const out = new Map<string, Val>();
+      for (const v of U.enumerate(ty, o.size)) if (out.size < cap) out.set(render(v), v);
+      try {
+        for (let tries = 0; out.size < cap && tries < cap * 4; tries++) {
+          const v = U.random(ty, Math.max(o.size, 3), r);
+          out.set(render(v), v);
+        }
+      } catch (err) {
+        if (err instanceof Unsupported) throw new Skip(`\`exs\` witness ${e.name}: no generator for type ${err.message}`);
+        throw err;
+      }
+      return [...out.values()].map((v) => ({ name: e.name, q: render(v, qualify), n: render(v, nameOut) }));
     });
     const combos: { name: string; q: string; n: string }[][] = [];
     const build = (i: number, acc: { name: string; q: string; n: string }[]) => {
@@ -1283,16 +1317,6 @@ async function checkLaw(L: Loaded, d: Decl, li: number, o: Options, U: Universe,
   }
 }
 
-/** Local `import ./x.bend` specs, in order. */
-function localImports(text: string): string[] {
-  const out: string[] = [];
-  for (const l of text.split("\n")) {
-    const m = /^import\s+(\.{1,2}\/\S+\.bend)(\s+as\s+\S+)?\s*$/.exec(l.trim());
-    if (m !== null) out.push(m[1]);
-  }
-  return out;
-}
-
 /** Removes each named def's `defSpan` lines, so the laws it filled become open. */
 function stripFills(text: string, fills: string[]): string {
   const spans = fills.map((n) => defSpan(text, n)).filter((s): s is { start: number; end: number } => s !== null);
@@ -1303,21 +1327,38 @@ function stripFills(text: string, fills: string[]): string {
   return lines.join("\n");
 }
 
-// `text` without `fillNames`, local imports absolute from `dir` except the `--impl` one, which
+// `text` without `fillNames`, path imports absolute from `dir` except the `--impl` one, which
 // `rootFor` still needs to find and replace.
-function implRootText(text: string, dir: string, fillNames: string[], implBase: string): string {
-  const lines = stripFills(text, fillNames).split("\n");
-  const locals = lines
-    .map((l, i) => ({ i, m: /^import\s+(\.{1,2}\/\S+\.bend)(\s+as\s+\S+)?\s*$/.exec(l.trim()) }))
-    .filter((x) => x.m !== null);
-  const byName = locals.filter((x) => path.basename(x.m![1]) === implBase);
+function implRootText(S: Stage, text: string, dir: string, fillNames: string[], implBase: string): string {
+  const stripped = stripFills(text, fillNames);
+  const locals = pathImports(stripped).filter((x) => x.spec.startsWith("."));
+  const byName = locals.filter((x) => path.basename(x.spec) === implBase);
   const keep = byName.length === 1 ? byName[0] : byName.length === 0 && locals.length === 1 ? locals[0] : null;
-  for (const x of locals) {
-    if (x === keep) continue;
-    const abs = path.resolve(dir, x.m![1]);
-    lines[x.i] = `import ${fs.existsSync(abs) ? fs.realpathSync(abs) : abs}${x.m![2] ?? ""}`;
+  return stagedImports(S, stripped, dir, (spec) => spec === keep?.spec);
+}
+
+/** Own defs whose type is a proposition (a statement, `Empty` or a predicate application) and that no other kept def uses. */
+function proofDefs(L: Loaded, text: string): string[] {
+  const preds = new Set(decls(L, { scope: "all" }).filter((d) => d.predicate).map((d) => printedName(d.name)));
+  const defs = decls(L, { scope: "own" }).filter((d) => d.kind !== "law" && d.kind !== "type" && d.kind !== "ctor");
+  const isProof = (d: Decl) => {
+    if ((d.kind !== "def" && d.kind !== "template") || d.predicate) return false;
+    if (d.statement) return true;
+    const tip = tipOf(L, d.name);
+    return tip === "Empty" || preds.has(applicationHead(tip) ?? "");
+  };
+  const body = (n: string) => {
+    const s = defSpan(text, n);
+    return s === null ? "" : text.split("\n").slice(s.start - 1, s.end).join("\n");
+  };
+  const proofs = new Set(defs.filter(isProof).map((d) => d.name));
+  const kept = defs.filter((d) => !proofs.has(d.name)).map((d) => body(d.name));
+  // a proof that a kept def passes as an argument stays, with every proof it uses in turn
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const n of proofs) if (kept.some((b) => mentions(b, n))) { proofs.delete(n); kept.push(body(n)); grew = true; }
   }
-  return lines.join("\n");
+  return [...proofs];
 }
 
 /** A def header (may span lines) as text. */
@@ -1395,43 +1436,49 @@ export async function mutate(file: string, o: MutateOptions): Promise<MutateRepo
     mode = "impl";
   } else {
     const rootL = await load(abs);
-    const locals = localImports(fs.readFileSync(abs, "utf8"));
+    const locals = pathImports(fs.readFileSync(abs, "utf8")).filter((x) => x.spec.startsWith("."));
     const rootDecls = decls(rootL, { scope: "own" });
     const rootLaws = new Set(rootDecls.filter((d) => d.kind === "law").map((d) => d.name));
     const hasDef = rootDecls.some((d) => (d.kind === "def" || d.kind === "template") && !rootLaws.has(d.name));
-    if (locals.length === 1 && !hasDef) { target = path.resolve(path.dirname(abs), locals[0]); mode = "impl"; }
+    if (locals.length === 1 && !hasDef) { target = path.resolve(path.dirname(abs), locals[0].spec); mode = "impl"; }
     else { target = abs; mode = "in-file"; }
   }
   const L = await load(target);
   const own = decls(L, { scope: "own" });
+  const targetText = fs.readFileSync(target, "utf8");
+  // Proofs (law fills and proposition-typed helpers) are stripped from every copy, or a mutant's
+  // behaviour change only breaks a proof and is misclassified as `invalid` (README).
+  const targetStrip = [...own.filter((d) => d.kind === "law" && d.proved).map((d) => d.name), ...proofDefs(L, targetText)];
   const lawNames = new Set(own.filter((d) => d.kind === "law").map((d) => d.name));
-  let defs = own.filter((d) => (d.kind === "def" || d.kind === "template") && !lawNames.has(d.name) && !d.predicate && !d.statement);
+  let defs = own.filter((d) => (d.kind === "def" || d.kind === "template") && !lawNames.has(d.name) && !d.predicate && !d.statement && !targetStrip.includes(d.name));
   if (o.def !== undefined) {
     const one = defs.filter((d) => d.name === o.def);
     if (one.length === 0) throw new UsageError(`no mutable def named ${o.def} in ${path.relative(process.cwd(), target)}`);
     defs = one;
   }
   if (defs.length === 0) throw new UsageError(`no mutable defs in ${path.relative(process.cwd(), target)}`);
-  const targetText = fs.readFileSync(target, "utf8");
   const safeBase = path.basename(target).replace(/[^\w.-]/g, "_");
-
-  // In impl mode the root is the laws file; its proof defs must be stripped too, or a mutant's
-  // behaviour change only breaks a proof and is misclassified as `invalid` (README).
-  const rootText = mode === "impl" ? fs.readFileSync(abs, "utf8") : targetText;
-  const fillDecls = mode === "impl" ? decls(await load(abs), { scope: "own" }) : own;
-  const fillNames = fillDecls.filter((d) => d.kind === "law" && d.proved).map((d) => d.name);
+  // Copies live elsewhere, so their path imports point back at the originals (or importable copies).
+  const S = newStage(tmp);
+  const copyText = (text: string) => stagedImports(S, stripFills(text, targetStrip), path.dirname(realOf(target)));
 
   const baseDir = path.join(tmp, "base");
   fs.mkdirSync(baseDir, { recursive: true });
   let baseReport: Report;
   let rootPath: string;
   if (mode === "impl") {
+    const rootL = await load(abs);
+    const rootText = fs.readFileSync(abs, "utf8");
+    const rootStrip = [...decls(rootL, { scope: "own" }).filter((d) => d.kind === "law" && d.proved).map((d) => d.name), ...proofDefs(rootL, rootText)];
     rootPath = path.join(baseDir, `root_${path.basename(abs).replace(/[^\w.-]/g, "_")}`);
-    fs.writeFileSync(rootPath, implRootText(rootText, path.dirname(abs), fillNames, path.basename(target)));
-    baseReport = await lawcheck(rootPath, { ...opts, impl: target, tmpDir: baseDir });
+    fs.writeFileSync(rootPath, implRootText(S, rootText, path.dirname(abs), rootStrip, path.basename(target)));
+    const baseImpl = path.join(baseDir, "impl", safeBase);
+    fs.mkdirSync(path.dirname(baseImpl), { recursive: true });
+    fs.writeFileSync(baseImpl, copyText(targetText));
+    baseReport = await lawcheck(rootPath, { ...opts, impl: baseImpl, tmpDir: baseDir });
   } else {
     rootPath = path.join(baseDir, safeBase);
-    fs.writeFileSync(rootPath, stripFills(targetText, fillNames));
+    fs.writeFileSync(rootPath, copyText(targetText));
     baseReport = await lawcheck(rootPath, { ...opts, impl: undefined, tmpDir: baseDir });
   }
   if (baseReport.laws.some((l) => l.status === "fail")) throw new UsageError("the laws already fail on the unmutated code; fix those first");
@@ -1457,7 +1504,7 @@ export async function mutate(file: string, o: MutateOptions): Promise<MutateRepo
       const dir = path.join(tmp, "mut", `${d.name}_${i}`);
       fs.mkdirSync(dir, { recursive: true });
       const mutantPath = path.join(dir, safeBase);
-      fs.writeFileSync(mutantPath, mode === "in-file" ? stripFills(m.text, fillNames) : m.text);
+      fs.writeFileSync(mutantPath, copyText(m.text));
       const runOpts: Options = { ...opts, shrink: false, firstFail: true, tmpDir: dir, impl: mode === "impl" ? mutantPath : undefined };
       const res: MutantResult = { id: m.id, def: d.name, op: m.op, line: m.line, before: m.before, after: m.after, status: "survived" };
       try {

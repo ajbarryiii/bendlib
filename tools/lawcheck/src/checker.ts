@@ -41,7 +41,8 @@ export function bendBin(): string {
 let active = 0;
 const waiting: (() => void)[] = [];
 
-async function slot<T>(jobs: number, fn: () => Promise<T>): Promise<T> {
+/** Runs `fn` once fewer than `jobs` bend processes (checker runs and native builds/runs) are active. */
+export async function slot<T>(jobs: number, fn: () => Promise<T>): Promise<T> {
   if (active >= jobs) await new Promise<void>((res) => waiting.push(res));
   active++;
   try {
@@ -133,7 +134,7 @@ export async function evaluate(E: Engine, items: Item[], stopAtFail = false, sto
           res.set(rest[0].id, { r: "toolarge" });
         } else {
           const mid = Math.ceil(rest.length / 2);
-          const halves = await Promise.all([evaluate(E, rest.slice(0, mid), stopAtFail), evaluate(E, rest.slice(mid), stopAtFail)]);
+          const halves = await Promise.all([evaluate(E, rest.slice(0, mid), stopAtFail, stopAtUndecidable), evaluate(E, rest.slice(mid), stopAtFail, stopAtUndecidable)]);
           for (const m of halves) for (const [k, v] of m) res.set(k, v);
         }
         break;

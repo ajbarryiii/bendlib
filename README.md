@@ -104,7 +104,7 @@ the move to bend 2.0.34.
 bun tools/install-bend.ts                          # the pinned compiler (toolchain.json)
 bun test tools/                                    # tool tests
 bun tools/mathlib/check.ts packages/bend-mathlib   # every module checks
-bun tools/mathlib/lint.ts packages/bend-mathlib --erasure
+bun tools/mathlib/devlib.ts run -- bun tools/mathlib/lint.ts packages/bend-mathlib --erasure
 ```
 
 ## Add a lemma
@@ -119,7 +119,7 @@ bun tools/comments.ts
 bun tools/mathlib/devlib.ts --check
 bun tools/mathlib/devlib.ts run -- bun tools/mathlib/check.ts packages/bend-mathlib
 for m in $(find packages/bend-mathlib -name '*.bend' | sort); do bun tools/mathlib/devlib.ts run -- bun tools/lawcheck/cli.ts "$m" --max-instances 100 --strict --allow-skip cong2,eq_true_of_ne_false,foldl_eq_foldr,foldl_eq_foldr_sym,foldl_op_eq_foldr_op,foldl_op_eq_foldr_op_sym,le_antisymm_eq,le_total,le_total_d,le_total_of_not_le,le_total_true,le_total_true_sym,le_trans3,le_trans4,maybe_bind_assoc,maybe_bind_assoc_sym,maybe_bind_map,maybe_bind_map_sym,maybe_map_bind,maybe_map_bind_sym,maybe_map_compose,maybe_map_compose_sym,maybe_map_pure,maybe_map_pure_sym,maybe_pure_bind,maybe_pure_bind_sym,op_assoc4,op_assoc4_sym,op_comm3,op_comm3_sym,op_four,op_four_sym,op_left_comm,op_left_comm_sym,op_right_comm,op_right_comm_sym,subst || exit 1; done
-bun tools/mathlib/lint.ts packages/bend-mathlib --erasure
+bun tools/mathlib/devlib.ts run -- bun tools/mathlib/lint.ts packages/bend-mathlib --erasure
 bun tools/mathlib/twins.ts packages/bend-mathlib --check
 bun tools/mathlib/lock.ts packages/bend-mathlib --check
 bun tools/mathlib/index.ts packages/bend-mathlib bend-mathlib 0.7.3.0 --check

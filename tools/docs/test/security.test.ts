@@ -1,12 +1,12 @@
 // Hardening of untrusted hub input: HTML escaping, path containment, name validation,
 // cached-manifest verification and a bounded fetch. Real code paths, no network for 1–4.
 
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
-import { ensurePackage, fetchHub, fetchNames, NAMES_LIMIT, safePath, seedNames, sha256, underRoot, validNameRecords, type NameRecord } from "../src/hub.ts";
-import { modPage, encPath, renderModule, renderPackage } from "../src/render.ts";
+import { ensurePackage, fetchHub, fetchNames, NAMES_CAP, PACKAGES_PAGE, safePath, seedNames, sha256, underRoot, validNameRecords, type NameRecord } from "../src/hub.ts";
+import { modPage, encPath, renderLlms, renderModule, renderPackage } from "../src/render.ts";
 import type { Module, Package, Site } from "../src/model.ts";
 
 const HASH = "0x" + "a".repeat(32);
@@ -118,40 +118,93 @@ describe("hub names are validated (PLAN F1)", () => {
   test("planted negative: a record whose versions are all malformed is dropped", () => {
     expect(validNameRecords([rec("valid-package-name", [{ version: "1.0", hash: "0xzz" }])])).toEqual([]);
   });
+  test("a name with no versions is reported as such, not as invalid", () => {
+    const err = spyOn(console, "error").mockImplementation(() => {});
+    try {
+      expect(validNameRecords([rec("reserved-name", [])])).toEqual([]);
+      expect(err.mock.calls.map((c) => String(c[0]))).toEqual(["hub: skipped 1 name(s) with no versions: reserved-name"]);
+    } finally {
+      err.mockRestore();
+    }
+  });
 });
 
 describe("the name list is fetched whole", () => {
-  const serveNames = (count: number, seen: string[]) => Bun.serve({
+  const latest = { version: "1.0.0.0", hash: HASH, ts: 0, desc: "" };
+  type Hub = { names: number; rows: { hash: string; name: string | null }[]; ignoreAfter?: boolean; record?: (name: string) => Response | null };
+  // A hub like the real one (observed 2026-10-17): names.json stops at NAMES_CAP, packages.json pages by `after`.
+  const serveHub = (h: Hub, seen: string[]) => Bun.serve({
     port: 0,
     fetch(req) {
       const u = new URL(req.url);
       seen.push(u.pathname + u.search);
       if (u.pathname === "/names.json") {
-        return Response.json(Array.from({ length: count }, (_, i) => ({ name: `name-number-${i}`, latest: { version: "1.0.0.0", hash: HASH, ts: 0, desc: "" } })));
+        const all = Array.from({ length: h.names }, (_, i) => ({ name: `name-number-${i}`, owner_login: "o", ts: 0, latest }));
+        return Response.json(all.slice(0, NAMES_CAP));
       }
-      return Response.json({ versions: [{ version: "1.0.0.0", hash: HASH, ts: 0 }] });
+      if (u.pathname === "/packages.json") {
+        const after = h.ignoreAfter ? 0 : Number(u.searchParams.get("after") ?? 0);
+        const page = h.rows.slice(after, after + PACKAGES_PAGE).map((r) => ({ ...r, ts: 0, version: r.name ? "1.0.0.0" : null }));
+        return Response.json({ total: h.rows.length, packages: page });
+      }
+      const name = decodeURIComponent(u.pathname.replace(/^\/name\//, ""));
+      return h.record?.(name) ?? Response.json({ name, owner_login: "o", ts: 0, latest, versions: [{ version: "1.0.0.0", hash: HASH, ts: 0 }] });
     },
   });
-  test("names.json is asked for more than the hub's default page of 30", async () => {
+  const rows = (n: number, named: (i: number) => string | null) => Array.from({ length: n }, (_, i) => ({ hash: "0x" + i.toString(16).padStart(32, "0"), name: named(i) }));
+  const url = (s: { port: number | undefined }) => `http://127.0.0.1:${s.port}`;
+
+  test("names.json is asked for its cap, and a shorter list is taken whole", async () => {
     const seen: string[] = [];
-    const server = serveNames(31, seen);
+    const server = serveHub({ names: 31, rows: [] }, seen);
     try {
-      const names = await fetchNames(4, `http://127.0.0.1:${server.port}`);
-      expect(names.length).toBe(31);
-      expect(seen).toContain(`/names.json?limit=${NAMES_LIMIT}`);
+      expect((await fetchNames(4, url(server))).length).toBe(31);
+      expect(seen).toContain(`/names.json?limit=${NAMES_CAP}`);
     } finally {
       server.stop(true);
     }
   });
-  test("planted negative: a list as long as the limit is an error, never a partial site", async () => {
+  test("planted negative: a names.json list as long as the cap is truncated; names only packages.json carries are still fetched", async () => {
     const seen: string[] = [];
-    const server = serveNames(NAMES_LIMIT, seen);
+    // 150 names on the hub; names.json shows 100, the other 50 appear only on packages.json's second and third pages.
+    const server = serveHub({ names: 150, rows: rows(250, (i) => (i >= 150 && i < 200 ? null : i >= 200 ? `name-number-${i - 100}` : null)) }, seen);
     try {
-      await expect(fetchNames(4, `http://127.0.0.1:${server.port}`)).rejects.toThrow(/may be truncated/);
-      expect(seen).toEqual([`/names.json?limit=${NAMES_LIMIT}`]);
+      const names = (await fetchNames(4, url(server))).map((n) => n.name);
+      expect(names.length).toBe(150);
+      expect(names).toContain("name-number-149");
+      expect(seen).toContain(`/packages.json?sort=new&limit=${PACKAGES_PAGE}&after=200`);
     } finally {
       server.stop(true);
     }
+  });
+  test("planted negative: packages.json pages that hold fewer packages than its total are an error, never a partial name list", async () => {
+    const server = serveHub({ names: 100, rows: rows(250, () => null), ignoreAfter: true }, []);
+    try {
+      await expect(fetchNames(4, url(server))).rejects.toThrow(/listed 100 packages over its pages, but reports 250/);
+    } finally {
+      server.stop(true);
+    }
+  });
+  test("planted negative: a vanished name is dropped and an unreachable one keeps the listing's latest; the rest still build", async () => {
+    const record = (name: string) => (name === "name-number-3" ? new Response("gone", { status: 404 }) : name === "name-number-4" ? new Response("down", { status: 503 }) : null);
+    const server = serveHub({ names: 6, rows: [], record }, []);
+    try {
+      const names = await fetchNames(4, url(server));
+      expect(names.map((n) => n.name).sort()).toEqual(["name-number-0", "name-number-1", "name-number-2", "name-number-4", "name-number-5"]);
+      expect(names.find((n) => n.name === "name-number-4")!.versions).toEqual([{ version: "1.0.0.0", hash: HASH, ts: 0 }]);
+    } finally {
+      server.stop(true);
+    }
+  }, 20_000);
+});
+
+describe("hub descriptions cannot break llms.txt", () => {
+  test("planted negative: a CR or newline in a description stays inside its package's one line", () => {
+    const p = { ...pkg([]), desc: "first\r\n## Injected heading\r- [fake](x)\tend" };
+    const lines = renderLlms(site(p)).split("\n");
+    expect(lines.filter((l) => l.startsWith("## "))).toEqual(["## Packages"]);
+    expect(lines).toContain(`- [${HASH.slice(0, 10)}](pkg/${HASH}/index.html): first ## Injected heading - [fake](x) end (not checked, 0/0 laws proved)`);
+    expect(lines.some((l) => l.includes("\r"))).toBe(false);
   });
 });
 

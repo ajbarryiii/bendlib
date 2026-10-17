@@ -14,7 +14,7 @@
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
-import { BEND, CLEAN, PkgError, ROOT, baseNames, packageModules, parseModule, type Module } from "./lib.ts";
+import { BEND, CLEAN, PkgError, ROOT, baseNames, isPredicate, packageModules, parseModule, type Module } from "./lib.ts";
 
 const USAGE = "usage: bun tools/mathlib/lint.ts [pkgdir] [--erasure] [--allow-types] [--kernel]";
 const usage = (msg: string): never => { console.error(`lint: ${msg}\n${USAGE}`); process.exit(2); };
@@ -51,9 +51,11 @@ for (const m of mods) {
     if (law.claimLines.length !== 1) at(m, law.line, `law '${law.name}' must have exactly one claim line (found ${law.claimLines.length})`);
     if (!law.proof) at(m, law.line, `law '${law.name}' has no 'def ${law.name}(...)' proof directly after it`);
   }
+  for (const line of m.stray) at(m, line, "a law must be a column-0 'law name:' block (bend accepts other forms the tools cannot read)");
   for (const d of m.defs) {
     if (!NAME.test(d.name)) at(m, d.line, `def name '${d.name}' must be lowercase snake_case without dots`);
-    if (!d.name.startsWith("internal_") && /->\s*(Data|Type)\s*:\s*$/.test(d.header)) {
+    if (!d.name.startsWith("internal_") && isPredicate(d)) {
+      if (d.doc.length === 0) at(m, d.line, `predicate '${d.name}' has no '#' doc line above it`);
       const body = d.body.filter((l) => l.trim() !== "");
       if (body.length !== 1 && !kernel) at(m, d.line, `predicate '${d.name}' must have a one-line body`);
       const text = body.join(" ");
@@ -87,23 +89,33 @@ if (doErasure) {
   // one binder erased, re-check, then restore the original text (nothing is deleted).
   const dir = mkdtempSync(join(tmpdir(), "bendlib-erasure-"));
   cpSync(pkg, dir, { recursive: true });
+  const check = (target: string) => {
+    const p = Bun.spawnSync([BEND, target, "--check-only"], { cwd: dir, env: { ...process.env, BEND_NO_TELEMETRY: "1" } });
+    return (new TextDecoder().decode(p.stdout) + new TextDecoder().decode(p.stderr)).trim();
+  };
   for (const m of mods) {
     const lines = m.text.split("\n");
+    const target = join(dir, relative(pkg, m.file));
+    // A failed mutant reads as "not erasable", so a module that fails unmodified would pass silently.
+    let baseline: string | undefined;
     for (const law of m.laws) {
       for (const b of law.binders) {
         if (b.mark === "-" || b.mark === "~" || /^(Type|Data|Kind\b)/.test(b.type)) continue;
         const idx = lines.findIndex((l, i) => i >= law.line && l.trim() === b.raw);
         if (idx < 0) continue;
-        const target = join(dir, relative(pkg, m.file));
+        baseline ??= check(target);
+        if (baseline !== CLEAN) continue;
         const mutated = lines.slice();
         mutated[idx] = mutated[idx].replace(/for\s+[+]?/, "for -");
         mkdirSync(dirname(target), { recursive: true });
         writeFileSync(target, mutated.join("\n"));
-        const p = Bun.spawnSync([BEND, target, "--check-only"], { cwd: dir, env: { ...process.env, BEND_NO_TELEMETRY: "1" } });
-        const out = (new TextDecoder().decode(p.stdout) + new TextDecoder().decode(p.stderr)).trim();
+        const out = check(target);
         writeFileSync(target, m.text);
         if (out === CLEAN) at(m, idx + 1, `binder '${b.name}' of '${law.name}' can be erased (write 'for -${b.name}')`);
       }
+    }
+    if (baseline !== undefined && baseline !== CLEAN) {
+      at(m, 1, `erasure not checked: the unmodified module fails in the scratch copy:\n${baseline.split("\n").slice(0, 4).join("\n")}`);
     }
   }
 }

@@ -20,7 +20,8 @@ if (!Number.isInteger(maxSeconds) || maxSeconds <= 0) usage(`--max-seconds needs
 const pkg = resolve(args.find((a, i) => !a.startsWith("--") && args[i - 1] !== "--max-seconds") ?? join(ROOT, "packages", "bend-mathlib"));
 
 const pinned = JSON.parse(readFileSync(join(ROOT, "toolchain.json"), "utf8")).bend.version as string;
-const ver = new TextDecoder().decode(Bun.spawnSync([BEND, "version"]).stdout).trim();
+let ver = "";
+try { ver = new TextDecoder().decode(Bun.spawnSync([BEND, "version"]).stdout).trim(); } catch { /* no compiler: reported below */ }
 if (ver !== `bend ${pinned}`) {
   console.error(`toolchain mismatch: toolchain.json pins ${pinned}, ${BEND} reports "${ver}"`);
   process.exit(2);

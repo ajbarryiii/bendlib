@@ -2,11 +2,11 @@
 // `bend <file> --check-only` on 2.0.37 (hub files or experiments named in each test).
 
 import { describe, expect, test } from "bun:test";
-import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { BEND, checkCommand, checkFile, classify, crossCheck, sandboxProbe, worst, type FileStatus } from "../src/status.ts";
-import { stale, DEFAULT_TIMEOUT } from "../build.ts";
+import { sameVerdict, stale, DEFAULT_TIMEOUT } from "../build.ts";
 
 const CLEAN_OUT = "ALL PROOFS CHECK\nUse --verdict for mathematical validity.\n";
 
@@ -176,6 +176,17 @@ describe("stale", () => {
   test("planted negative: a genuine checker failure stays cached", () => {
     expect(stale(s("fails", "- expected : a fresh constructor name"), 20)).toBe(false);
   });
+  test("a hub fetch failure, which bend words the same whether missing or unreachable, is re-checked", () => {
+    // verbatim: bend 2.0.37 on hub 0x47d5f6c9…/main.bend, which imports a hash the hub does not have
+    const detail = "Error:\n- message  : a file at https://hub.bend-lang.com/0x00000000000000000000000000000001/manifest hashing to 00000000000000000000000000000001\nLocation:\n1 | import Base";
+    expect(stale(s("fails", detail), 20)).toBe(true);
+  });
+  test("a re-check with the same verdict keeps the cached entry; a new verdict or a timeout replaces it", () => {
+    expect(sameVerdict(s("fails", "a file at https://h/x", 0.1), s("fails", "a file at https://h/x", 0.3))).toBe(true);
+    expect(sameVerdict(s("fails", "a file at https://h/x"), s("checks"))).toBe(false);
+    expect(sameVerdict(s("timeout", "", 20), s("timeout", "", 180))).toBe(false);
+    expect(sameVerdict(undefined, s("checks"))).toBe(false);
+  });
   test("planted negative: a timeout keeps its time budget rule", () => {
     expect(stale(s("timeout", "", 5), 20)).toBe(true);
     expect(stale(s("timeout", "", 19.5), 20)).toBe(false);
@@ -186,6 +197,36 @@ describe("stale", () => {
   test("a missing entry is stale and a fresh check is not", () => {
     expect(stale(undefined, 20)).toBe(true);
     expect(stale(s("checks"), 20)).toBe(false);
+  });
+});
+
+describe("docs.yml keeps the checks of a failed build", () => {
+  type Step = { id?: string; uses?: string; run?: string; if?: string };
+  const steps = (Bun.YAML.parse(readFileSync(join(import.meta.dir, "../../../.github/workflows/docs.yml"), "utf8")) as { jobs: { build: { steps: Step[] } } }).jobs.build.steps;
+  const changed = steps.find((s) => s.id === "docs-changed")!;
+  // Runs the workflow's own "did the docs status change?" script in a scratch checkout.
+  const run = (before: string, status: string | null): string => {
+    const dir = mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), "bend-docs-wf-"));
+    mkdirSync(join(dir, "tools/docs/.cache"), { recursive: true });
+    if (status !== null) writeFileSync(join(dir, "tools/docs/.cache/status.json"), status);
+    const out = join(dir, "out");
+    writeFileSync(out, "");
+    const script = changed.run!.replace("${{ steps.docs-status.outputs.sha }}", before);
+    const p = Bun.spawnSync(["bash", "-e", "-c", script], { cwd: dir, env: { ...process.env, GITHUB_OUTPUT: out } });
+    expect(p.exitCode).toBe(0);
+    return readFileSync(out, "utf8").trim();
+  };
+  test("planted negative: the change test and the cache save run after a failed build step, the deploy upload does not", () => {
+    expect(changed.if).toContain("always()");
+    expect(steps.find((s) => s.uses?.startsWith("actions/cache/save@"))!.if).toMatch(/^always\(\) && steps\.docs-changed\.outputs\.yes == 'true'$/);
+    expect(steps.find((s) => s.uses?.startsWith("actions/upload-pages-artifact@"))!.if).toBeUndefined();
+  });
+  test("the change test says yes only for a status.json that exists and differs from the restored one", () => {
+    const sha = (s: string) => new Bun.CryptoHasher("sha256").update(s).digest("hex");
+    expect(run("absent", "{}")).toBe("yes=true");
+    expect(run(sha("{}"), "{}")).toBe("yes=false");
+    expect(run(sha("{}"), '{"k":1}')).toBe("yes=true");
+    expect(run("absent", null)).toBe("yes=false");
   });
 });
 

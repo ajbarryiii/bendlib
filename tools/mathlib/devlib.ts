@@ -12,14 +12,14 @@
 
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, symlinkSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
-import { PkgError, ROOT, packageModules, stripCommentsAndStrings } from "./lib.ts";
+import { PkgError, ROOT, importPaths, packageModules } from "./lib.ts";
 import { hubHash, packageFiles } from "./hash.ts";
 
 const USAGE = "usage: bun tools/mathlib/devlib.ts [--root <dir>] run -- <cmd…>  |  [--root <dir>] --check";
 const usage = (msg: string): never => { console.error(`devlib: ${msg}\n${USAGE}`); process.exit(2); };
 
 const HASH = /^0x[0-9a-f]{32}$/;
-const HASH_IMPORT = /^import\s+(0x[0-9a-fA-F]+)\/(\S+\.bend)\s+as\s+[A-Za-z_][A-Za-z0-9_]*/gm;
+const HASH_IMPORT = /^(0x[0-9a-fA-F]+)\/(\S+\.bend)$/;
 
 export type LocalPackage = { name: string; dir: string; entry: string; hash: string; files: string[] };
 export type Stale = { file: string; hash: string; path: string; owner: string; expected: string };
@@ -80,21 +80,23 @@ export function buildDevlib(root: string): { dir: string; packages: LocalPackage
 export function hashPins(pkgDir: string): { file: string; hash: string; path: string }[] {
   const out: { file: string; hash: string; path: string }[] = [];
   for (const file of packageModules(pkgDir)) {
-    const text = stripCommentsAndStrings(readFileSync(file, "utf8"));
-    for (const m of text.matchAll(HASH_IMPORT)) out.push({ file, hash: m[1], path: m[2] });
+    for (const p of importPaths(readFileSync(file, "utf8"))) {
+      const m = HASH_IMPORT.exec(p);
+      if (m) out.push({ file, hash: m[1], path: m[2] });
+    }
   }
   return out;
 }
 
-/** A pin is stale when its path lives in exactly one other local package and the pin is not that package's hash. */
+/** A pin is stale when its path lives in other local packages and the pin is none of their hashes. */
 export function staleDevlib(packages: LocalPackage[]): Stale[] {
   const stale: Stale[] = [];
   for (const p of packages) {
     for (const pin of hashPins(p.dir)) {
       if (!HASH.test(pin.hash)) { stale.push({ ...pin, owner: "", expected: "" }); continue; }
       const candidates = packages.filter((q) => q.dir !== p.dir && existsSync(join(q.dir, pin.path)));
-      if (candidates.some((q) => q.hash === pin.hash)) continue;
-      if (candidates.length === 1) stale.push({ ...pin, owner: candidates[0].name, expected: candidates[0].hash });
+      if (candidates.length === 0 || candidates.some((q) => q.hash === pin.hash)) continue;
+      stale.push({ ...pin, owner: candidates.map((q) => q.name).join(" or "), expected: candidates.map((q) => q.hash).join(" or ") });
     }
   }
   return stale;

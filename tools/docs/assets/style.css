@@ -2,6 +2,7 @@
 --ora:#c4845c;--red:#c46a60;--vio:#8b83b5;--grn:#7e9a5e;--pill:#e4dcf0;--okb:#e3e8d8;--warnb:#f1e0d3;--badb:#f1dcd8;
 --mono:ui-monospace,Menlo,"SF Mono",Consolas,"Liberation Mono",monospace}
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 html{background:var(--bg);color:var(--b01);font:15px/1.6 var(--mono);font-size:min(2.5vw,max(15px,1vw),26px);-webkit-text-size-adjust:100%;text-size-adjust:100%}
 body{margin:0}
 a{color:var(--vio);text-decoration:none;border-bottom:1px solid #d8d4e2}

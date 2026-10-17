@@ -115,7 +115,7 @@ def internal_append_nil(-A: Data, +ys: List<&2, A>) -> {List.append(&2, A, ys, N
       %Equal.sym(List<&2, A>, List.append(&2, A, t, Nil{}), t, internal_append_nil(A, t)) : {y <> _ == y <> t : List<&2, A>}
       {==}
 
-# Appending Nil is a permutation (steps: none).
+# Appending Nil is a permutation, by the empty step list.
 def perm_append_nil(-A: Data, +xs: List<&2, A>) -> K.perm(A, List.append(&2, A, xs, Nil{}), xs):
   (Nil{}, internal_append_nil(A, xs))
 
@@ -340,15 +340,3 @@ def internal_length_eq(-A: Data, +s: List<&2, Nat>, +xs: List<&2, A>, -ys: List<
 def perm_length(-A: Data, +xs: List<&2, A>, -ys: List<&2, A>, h: K.perm(A, xs, ys)) -> {List.length(&2, A, ys) == List.length(&2, A, xs) : Nat}:
   (s, e) = h
   internal_length_eq(A, s, xs, ys, e)
-
-def internal_perm_nil_nat() -> K.perm(Nat, Nil{}, Nil{}):
-  perm_nil(Nat)
-
-def internal_perm_dup_nat(+xs: List<&2, Nat>, -ys: List<&2, Nat>, h: K.perm(Nat, xs, ys)) -> K.perm(Nat, xs, ys) & K.perm(Nat, xs, ys):
-  perm_dup(Nat, xs, ys, h)
-
-def internal_perm_sym_nat(+xs: List<&2, Nat>, -ys: List<&2, Nat>, h: K.perm(Nat, xs, ys)) -> K.perm(Nat, ys, xs):
-  perm_sym(Nat, xs, ys, h)
-
-def internal_perm_length_nat(+xs: List<&2, Nat>, -ys: List<&2, Nat>, h: K.perm(Nat, xs, ys)) -> {List.length(&2, Nat, ys) == List.length(&2, Nat, xs) : Nat}:
-  perm_length(Nat, xs, ys, h)

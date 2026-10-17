@@ -1,5 +1,5 @@
 # bend-mathlib/string.bend: String append, reverse and length, and comparison.
-# Comparison descends String.eq -> String.cmp -> Char.cmp -> U32.cmp -> Word.cmp.
+# Comparison descends String.eq -> String.order -> String.cmp -> Char.cmp -> U32.cmp -> Word.cmp.
 import Base
 import ./nat.bend as MNat
 import ./bool.bend as MBool

@@ -137,13 +137,48 @@ export function defBody(text: string, line: number): string {
   const out: string[] = [];
   for (let i = line - 1; i < lines.length; i++) {
     if (i > line - 1 && /^[^\s#]/.test(lines[i])) break;
-    out.push(lines[i].replace(/"(\\.|[^"\\])*"|'(\\.|[^'\\])*'/g, '""').replace(/#.*$/, ""));
+    out.push(blankLine(lines[i]));
   }
   return out.join("\n");
 }
 
+const blankLine = (l: string) => l.replace(/"(\\.|[^"\\])*"|'(\\.|[^'\\])*'/g, '""').replace(/#.*$/, "");
+const HOLE = /(^|[^\w?])\?[A-Za-z_]\w*/g;
+
 /** A `?name` hole anywhere in the def's body; `bend guide` says such a hole leaves the goal open. */
-export const hasHole = (body: string) => /(^|[^\w?])\?[A-Za-z_]\w*/.test(body);
+export const hasHole = (body: string) => body.match(HOLE) !== null;
+
+/** 1-based lines of the top-level defs of `text` that hold a `?hole` or call a def that does: a proof among them rests on an open goal. */
+export function holedDefs(text: string): Set<number> {
+  const defs: { line: number; name: string; body: string }[] = [];
+  text.split("\n").forEach((l, i) => {
+    const m = l.match(/^(?:@unsafe\s+)?def\s+([A-Za-z_][\w.]*)\s*\(/);
+    if (m !== null) defs.push({ line: i + 1, name: m[1], body: defBody(text, i + 1) });
+  });
+  const holed = defs.filter((d) => hasHole(d.body));
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const d of defs) {
+      if (holed.includes(d) || !holed.some((h) => new RegExp(`(?<![\\w.])${esc(h.name)}(?!\\w)`).test(d.body))) continue;
+      holed.push(d);
+      grew = true;
+    }
+  }
+  return new Set(holed.map((d) => d.line));
+}
+
+// bend prints its count of open goals only when every other proof checks (observed on 2.0.37), so a proof
+// in an `open` file is verified unless it rests on a hole or an open goal lies outside the file (an import's).
+function openVerified(m: Module | undefined, src: string): (proofLine: number) => boolean {
+  const s = m?.status;
+  if (s == null || s.class !== "open" || m!.decls === null) return () => false;
+  const todo = Number(s.summary.match(/^(\d+) TODO/)?.[1] ?? NaN);
+  const holes = src.split("\n").map(blankLine).join("\n").match(HOLE)?.length ?? 0;
+  const lawsWithoutDef = m!.decls.filter((d) => d.kind === "law" && d.proofLine === undefined).length;
+  if (todo !== holes + lawsWithoutDef) return () => false;
+  const holed = holedDefs(src);
+  return (line) => !holed.has(line);
+}
 
 /** 1-based line of `def [Alias.]<local>(` in a file that fills an imported law, or null. */
 export function fillerLine(text: string, local: string): number | null {
@@ -165,6 +200,7 @@ export function finishPackage(p: Package, fills: Map<string, string[]>, text: (p
   for (const m of p.modules) {
     let unfilled = 0, rescued = 0, rescuedUnsafe = false;
     const src = m.decls ? text(m.path) : "";
+    const ownOpen = openVerified(m, src);
     for (const d of m.decls ?? []) {
       c.decls++;
       if (d.kind === "type") { c.types++; continue; }
@@ -173,9 +209,11 @@ export function finishPackage(p: Package, fills: Map<string, string[]>, text: (p
       c.laws++;
       if (d.proved && d.proofLine !== undefined && hasHole(defBody(src, d.proofLine))) { d.proved = false; d.holes = true; }
       // A proof in a file the checker did not accept is not a proof, whatever the reader inferred.
-      if (d.proved && m.status !== null && !passes(m.status)) { d.proved = false; d.unverified = m.status.class; }
+      const accepted = passes(m.status) || (d.proofLine !== undefined && ownOpen(d.proofLine));
+      if (d.proved && m.status !== null && !accepted) { d.proved = false; d.unverified = m.status.class; }
       if (!d.proved && !d.holes) {
-        unfilled++;
+        // Only a law without a def here is among the open goals bend counts for this file alone.
+        if (d.proofLine === undefined) unfilled++;
         const by = filledBy.get(`${m.path}#${d.name}`);
         if (by !== undefined && by !== m.path) {
           m.provedIn[d.name] = by;
@@ -183,9 +221,9 @@ export function finishPackage(p: Package, fills: Map<string, string[]>, text: (p
           const holes = fl !== null && hasHole(defBody(text(by), fl));
           const st = byPath.get(by)?.status;
           if (holes) d.holes = true;
-          else if (passes(st)) {
+          else if (passes(st) || (fl !== null && openVerified(byPath.get(by), text(by))(fl))) {
             d.proved = true;
-            rescued++;
+            if (d.proofLine === undefined) rescued++;
             if (st?.class === "unsafe") rescuedUnsafe = true;
           }
         }
