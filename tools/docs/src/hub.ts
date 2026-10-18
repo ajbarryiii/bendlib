@@ -82,18 +82,21 @@ export const PACKAGES_PAGE = 100;
 type Listed = { name: string; owner_login?: string; ts?: number; latest?: NameRecord["latest"] | null };
 export type PackageRow = { hash: string; ts: number; name?: string | null; version?: string | null };
 
-/** Every row of packages.json, all pages; an error when the pages hold fewer packages than its `total`. */
+/** Every row of packages.json, all pages; an error when the pages hold fewer packages than its `total` twice running. */
 export async function fetchPackageList(hub = HUB): Promise<PackageRow[]> {
-  const rows = new Map<string, PackageRow>();
-  let total = 0;
-  for (let after = 0; ; after += PACKAGES_PAGE) {
-    const page = await getJson<{ total: number; packages: PackageRow[] }>(`${hub}/packages.json?sort=new&limit=${PACKAGES_PAGE}&after=${after}`);
-    total = page.total;
-    for (const r of page.packages) rows.set(r.hash, r);
-    if (page.packages.length === 0 || after + PACKAGES_PAGE >= total) break;
+  let rows = new Map<string, PackageRow>(), total = 0;
+  // A publish between two page reads shifts the newest-first pages by one, so a short read is retried once.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    rows = new Map();
+    for (let after = 0; ; after += PACKAGES_PAGE) {
+      const page = await getJson<{ total: number; packages: PackageRow[] }>(`${hub}/packages.json?sort=new&limit=${PACKAGES_PAGE}&after=${after}`);
+      total = page.total;
+      for (const r of page.packages) rows.set(r.hash, r);
+      if (page.packages.length === 0 || after + PACKAGES_PAGE >= total) break;
+    }
+    if (rows.size >= total) return [...rows.values()];
   }
-  if (rows.size < total) throw new Error(`packages.json listed ${rows.size} packages over its pages, but reports ${total}: the name list would be incomplete`);
-  return [...rows.values()];
+  throw new Error(`packages.json listed ${rows.size} packages over its pages, but reports ${total}: the name list would be incomplete`);
 }
 
 /** The union of names.json (top and newest) and every name packages.json carries, each completed by its `/name/<n>` record. */

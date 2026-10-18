@@ -618,14 +618,17 @@ export function scratchBase(): string {
   return fs.existsSync("/tmp") && "/tmp".split("/").slice(1).every((s) => PLAIN_SEG.test(s)) ? "/tmp" : os.tmpdir();
 }
 
-const PATH_IMPORT = /^import\s+((?:\.{1,2})?\/\S+\.bend)(\s+as\s+\S+)?\s*$/;
+// bend.ts book_load's import line: trimmed, a trailing comment allowed, the path relative (`./x`,
+// `../x` or bare `x.bend`) or absolute; `0x…/` and `name@version/` paths are hub imports.
+const PATH_IMPORT = /^import\s+(\S+\.bend)(\s+as\s+[A-Za-z_]\w*)?\s*(?:#.*)?$/;
+const HUB_SPEC = /^(0x[0-9a-fA-F]+|[^/]*@[^/]*)\//;
 
-/** The `./`, `../` and absolute import lines of `text`: line index, spec, and the ` as X` suffix. */
+/** The path (non-hub) import lines of `text`: line index, spec, and the ` as X` suffix. */
 function pathImports(text: string): { i: number; spec: string; as: string }[] {
   const out: { i: number; spec: string; as: string }[] = [];
   text.split("\n").forEach((l, i) => {
     const m = PATH_IMPORT.exec(l.trim());
-    if (m !== null) out.push({ i, spec: m[1], as: m[2] ?? "" });
+    if (m !== null && !HUB_SPEC.test(m[1])) out.push({ i, spec: m[1], as: m[2] ?? "" });
   });
   return out;
 }
@@ -760,7 +763,7 @@ function rootFor(file: string, impl: string | undefined, tmp: string, S: Stage):
   if (!fs.existsSync(implAbs)) throw new UsageError(`--impl: no such file: ${impl}`);
   const text = fs.readFileSync(file, "utf8");
   const lines = text.split("\n");
-  const locals = pathImports(text).filter((x) => x.spec.startsWith("."));
+  const locals = pathImports(text).filter((x) => !path.isAbsolute(x.spec));
   let target = locals.filter((x) => path.basename(x.spec) === path.basename(implAbs));
   if (target.length === 0 && locals.length === 1) target = locals;
   if (target.length !== 1) throw new UsageError(`--impl: cannot tell which import of ${file} to replace (need one local import named ${path.basename(implAbs)})`);
@@ -1331,7 +1334,7 @@ function stripFills(text: string, fills: string[]): string {
 // `rootFor` still needs to find and replace.
 function implRootText(S: Stage, text: string, dir: string, fillNames: string[], implBase: string): string {
   const stripped = stripFills(text, fillNames);
-  const locals = pathImports(stripped).filter((x) => x.spec.startsWith("."));
+  const locals = pathImports(stripped).filter((x) => !path.isAbsolute(x.spec));
   const byName = locals.filter((x) => path.basename(x.spec) === implBase);
   const keep = byName.length === 1 ? byName[0] : byName.length === 0 && locals.length === 1 ? locals[0] : null;
   return stagedImports(S, stripped, dir, (spec) => spec === keep?.spec);
@@ -1436,7 +1439,7 @@ export async function mutate(file: string, o: MutateOptions): Promise<MutateRepo
     mode = "impl";
   } else {
     const rootL = await load(abs);
-    const locals = pathImports(fs.readFileSync(abs, "utf8")).filter((x) => x.spec.startsWith("."));
+    const locals = pathImports(fs.readFileSync(abs, "utf8")).filter((x) => !path.isAbsolute(x.spec));
     const rootDecls = decls(rootL, { scope: "own" });
     const rootLaws = new Set(rootDecls.filter((d) => d.kind === "law").map((d) => d.name));
     const hasDef = rootDecls.some((d) => (d.kind === "def" || d.kind === "template") && !rootLaws.has(d.name));

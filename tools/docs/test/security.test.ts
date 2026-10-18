@@ -131,13 +131,17 @@ describe("hub names are validated (PLAN F1)", () => {
 
 describe("the name list is fetched whole", () => {
   const latest = { version: "1.0.0.0", hash: HASH, ts: 0, desc: "" };
-  type Hub = { names: number; rows: { hash: string; name: string | null }[]; ignoreAfter?: boolean; record?: (name: string) => Response | null };
+  type Hub = { names: number; rows: { hash: string; name: string | null }[]; ignoreAfter?: boolean; ignoreAfterOnce?: boolean; record?: (name: string) => Response | null };
   // A hub like the real one (observed 2026-10-17): names.json stops at NAMES_CAP, packages.json pages by `after`.
-  const serveHub = (h: Hub, seen: string[]) => Bun.serve({
+  const serveHub = (h: Hub, seen: string[]) => { let passes = 0; return Bun.serve({
     port: 0,
     fetch(req) {
       const u = new URL(req.url);
       seen.push(u.pathname + u.search);
+      if (u.pathname === "/packages.json" && Number(u.searchParams.get("after") ?? 0) === 0) passes++;
+      if (h.ignoreAfterOnce && passes === 1 && u.pathname === "/packages.json") {
+        return Response.json({ total: h.rows.length, packages: h.rows.slice(0, PACKAGES_PAGE).map((r) => ({ ...r, ts: 0, version: null })) });
+      }
       if (u.pathname === "/names.json") {
         const all = Array.from({ length: h.names }, (_, i) => ({ name: `name-number-${i}`, owner_login: "o", ts: 0, latest }));
         return Response.json(all.slice(0, NAMES_CAP));
@@ -150,8 +154,8 @@ describe("the name list is fetched whole", () => {
       const name = decodeURIComponent(u.pathname.replace(/^\/name\//, ""));
       return h.record?.(name) ?? Response.json({ name, owner_login: "o", ts: 0, latest, versions: [{ version: "1.0.0.0", hash: HASH, ts: 0 }] });
     },
-  });
-  const rows = (n: number, named: (i: number) => string | null) => Array.from({ length: n }, (_, i) => ({ hash: "0x" + i.toString(16).padStart(32, "0"), name: named(i) }));
+  }); };
+  const rows =(n: number, named: (i: number) => string | null) => Array.from({ length: n }, (_, i) => ({ hash: "0x" + i.toString(16).padStart(32, "0"), name: named(i) }));
   const url = (s: { port: number | undefined }) => `http://127.0.0.1:${s.port}`;
 
   test("names.json is asked for its cap, and a shorter list is taken whole", async () => {
@@ -181,6 +185,14 @@ describe("the name list is fetched whole", () => {
     const server = serveHub({ names: 100, rows: rows(250, () => null), ignoreAfter: true }, []);
     try {
       await expect(fetchNames(4, url(server))).rejects.toThrow(/listed 100 packages over its pages, but reports 250/);
+    } finally {
+      server.stop(true);
+    }
+  });
+  test("a short packages.json read (a publish between two pages) is retried once, not fatal", async () => {
+    const server = serveHub({ names: 100, rows: rows(250, (i) => (i === 249 ? "name-only-on-the-last-page" : null)), ignoreAfterOnce: true }, []);
+    try {
+      expect((await fetchNames(4, url(server))).map((n) => n.name)).toContain("name-only-on-the-last-page");
     } finally {
       server.stop(true);
     }

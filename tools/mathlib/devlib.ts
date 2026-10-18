@@ -80,8 +80,8 @@ export function buildDevlib(root: string): { dir: string; packages: LocalPackage
 export function hashPins(pkgDir: string): { file: string; hash: string; path: string }[] {
   const out: { file: string; hash: string; path: string }[] = [];
   for (const file of packageModules(pkgDir)) {
-    for (const p of importPaths(readFileSync(file, "utf8"))) {
-      const m = HASH_IMPORT.exec(p);
+    for (const { path } of importPaths(readFileSync(file, "utf8"))) {
+      const m = HASH_IMPORT.exec(path);
       if (m) out.push({ file, hash: m[1], path: m[2] });
     }
   }

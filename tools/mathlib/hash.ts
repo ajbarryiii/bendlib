@@ -1,7 +1,8 @@
 // hash: compute the BendHub content hash of a package, exactly as `bend --publish` does
-// (bend2/main.ts cli_publish + pkg_files): the entry at its basename, every local import (read
-// like bend.ts book_load: `./x.bend`, `x.bend`, indented or commented) at its path, every foreign `.c`/`.js` a def imports (tld.i, main.ts:646-648) at its path, a
-// LICENSE beside any file; "0x" + sha256 of "sha256(content) path\n" lines, 32 hex.
+// (bend2/main.ts cli_publish + pkg_files): the entry at its basename, every local import (read as
+// bend.ts book_load reads them) at its path, every foreign `.c`/`.js` a def imports (tld.i,
+// main.ts:646-648) at its path, a LICENSE beside any file; "0x" + sha256 of
+// "sha256(content) path\n" lines, 32 hex.
 //
 // A path that climbs above the entry's directory (`../`) is refused (exit 2): bend re-roots such
 // a package at an ancestor and drops the ancestor's name (main.ts:639-644), so we cannot mirror
@@ -11,7 +12,7 @@
 
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { basename, dirname, join, normalize, relative } from "node:path";
+import { basename, dirname, join, normalize, relative, resolve } from "node:path";
 import { PkgError, importPaths, isHubImport } from "./lib.ts";
 
 const USAGE = "usage: bun tools/mathlib/hash.ts <entry.bend>";
@@ -58,7 +59,8 @@ export function packageFiles(entry: string): Record<string, string> {
     if (k in files) return;
     add(file, k);
     const text = files[k];
-    for (const p of importPaths(text)) if (!isHubImport(p)) visit(join(dirname(file), p));
+    // resolve, not join: an absolute import must stay absolute, so key() refuses it as bend does.
+    for (const { path } of importPaths(text)) if (!isHubImport(path)) visit(resolve(dirname(file), path));
     for (const m of text.matchAll(FOREIGN)) {
       if (!/\.(c|js)$/.test(m[1])) continue;
       const real = join(dirname(file), m[1]);

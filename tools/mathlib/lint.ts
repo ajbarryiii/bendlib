@@ -14,7 +14,7 @@
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
-import { BEND, CLEAN, PkgError, ROOT, baseNames, isPredicate, packageModules, parseModule, type Module } from "./lib.ts";
+import { BEND, CLEAN, PkgError, ROOT, baseNames, isHubImport, isPredicate, packageModules, parseModule, type Module } from "./lib.ts";
 
 const USAGE = "usage: bun tools/mathlib/lint.ts [pkgdir] [--erasure] [--allow-types] [--kernel]";
 const usage = (msg: string): never => { console.error(`lint: ${msg}\n${USAGE}`); process.exit(2); };
@@ -67,7 +67,7 @@ for (const m of mods) {
       // (`k(Some{x})`) is not a non-Base function reference.
       const lambdas = new Set([...text.matchAll(/([A-Za-z_][A-Za-z0-9_]*)\s*=>/g)].map((b) => b[1]));
       const own = new Set([...m.defs.map((x) => x.name), ...m.laws.map((x) => x.name)]);
-      const localAliases = new Set([...m.text.matchAll(/^import\s+\.\.?\/\S+\.bend\s+as\s+([A-Za-z_][A-Za-z0-9_]*)/gm)].map((i) => i[1]));
+      const localAliases = new Set(m.imports.filter((i) => !isHubImport(i.path)).map((i) => i.alias));
       const samePackage = (id: string) => kernel && (own.has(id) || localAliases.has(id.split(".")[0]));
       for (const call of text.matchAll(/([A-Za-z_][A-Za-z0-9_.]*)\s*\(/g)) {
         const fn = call[1];

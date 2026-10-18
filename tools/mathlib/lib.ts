@@ -20,8 +20,9 @@ export type Law = {
   proof?: { line: number; args: string[]; body: string[] };
 };
 export type Def = { name: string; line: number; doc: string[]; header: string; body: string[] };
+export type Import = { path: string; alias: string };
 /** `stray`: lines holding a `law` the strict parser did not take (indented, one-line); the tools reject them. */
-export type Module = { file: string; name: string; text: string; laws: Law[]; defs: Def[]; types: { name: string; line: number }[]; imports: string[]; stray: number[] };
+export type Module = { file: string; name: string; text: string; laws: Law[]; defs: Def[]; types: { name: string; line: number }[]; imports: Import[]; stray: number[] };
 
 // Strip `#` comments and string/char literals so scans do not match inside them.
 export function stripCommentsAndStrings(src: string): string {
@@ -79,8 +80,7 @@ export function parseModule(file: string, source?: string): Module {
   for (let i = 0; i < lines.length; i++) {
     const l = code[i];
     let m: RegExpMatchArray | null;
-    if ((m = lines[i].match(/^import\s+(\S+)/))) mod.imports.push(m[1]);
-    else if ((m = l.match(/^law\s+([A-Za-z_][A-Za-z0-9_.]*)\s*:\s*$/))) {
+    if ((m = l.match(/^law\s+([A-Za-z_][A-Za-z0-9_.]*)\s*:\s*$/))) {
       const law: Law = { name: m[1], line: i + 1, doc: docAbove(i), binders: [], claimLines: [], exs: [] };
       for (const b of block(i)) {
         if (b.trim() === "") continue;
@@ -104,18 +104,19 @@ export function parseModule(file: string, source?: string): Module {
     } else if ((m = l.match(/^type\s+([A-Za-z_][A-Za-z0-9_.]*)/))) mod.types.push({ name: m[1], line: i + 1 });
     else if (/(^|[^A-Za-z0-9_.])law\s+[A-Za-z_]/.test(l)) mod.stray.push(i + 1);
   }
+  mod.imports = importPaths(text);
   return mod;
 }
 
-/** The paths a file imports, read as bend's book_load reads them: the leading block of import, blank and `#` lines, trimmed. */
-export function importPaths(text: string): string[] {
-  const out: string[] = [];
+/** A file's `import <path> as <Alias>` lines, read as bend's book_load reads them: the leading block of import, blank and `#` lines, trimmed. */
+export function importPaths(text: string): Import[] {
+  const out: Import[] = [];
   for (const raw of text.replace(/^﻿/, "").split("\n")) {
     const line = raw.trim();
     if (line === "" || line.startsWith("#")) continue;
     if (!/^import(\s|$)/.test(line)) break;
     const m = /^import\s+(\S+)(?:\s+as\s+([A-Za-z_]\w*))?\s*(?:#.*)?$/.exec(line);
-    if (m !== null && m[2] !== undefined) out.push(m[1]);
+    if (m !== null && m[2] !== undefined) out.push({ path: m[1], alias: m[2] });
   }
   return out;
 }

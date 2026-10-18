@@ -81,6 +81,18 @@ describe("mutate runner", () => {
     expect(ms.some((m: any) => /no such file/.test(m.detail ?? ""))).toBe(false);
   }, T);
 
+  test("a bare `helper.bend` import with a trailing comment is staged like a `./` one (planted negative)", async () => {
+    const dir = files({
+      "helper.bend": ["import Base", "", "def two() -> Nat:", "  2n"],
+      "target.bend": ["import Base", "import helper.bend as H  # bend accepts this form", "", "def dbl(n: Nat) -> Nat:", "  match n:", "    case 0n:", "      0n",
+        "    case 1n+p:", "      Nat.add(H.two(), dbl(p))", "", "law dbl_one:", "  {dbl(1n) == 2n : Nat}"],
+    });
+    const rep = await mutate(path.join(dir, "target.bend"), { jobs: 4, maxInstances: 5, seed: 1, size: 3 });
+    const ms = def(rep, "dbl").mutants;
+    expect(ms.filter((m: any) => m.status === "killed").length).toBeGreaterThanOrEqual(2);
+    expect(ms.some((m: any) => /no such file/.test(m.detail ?? ""))).toBe(false);
+  }, T);
+
   test("impl mode keeps the impl file's own local imports resolvable in every mutant", async () => {
     const dir = files({
       "types.bend": ["import Base", "", "def two() -> Nat:", "  2n"],

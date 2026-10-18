@@ -792,6 +792,14 @@ test("packageFiles follows every local import form bend loads, and drops a BOM (
   const files = packageFiles(join(tmp, "all.bend"));
   expect(Object.keys(files).sort()).toEqual(["all.bend", "indented.bend", "plain.bend"]);
   expect(files["all.bend"].startsWith("import Base")).toBe(true);
+
+  // bend keys an absolute import by its path below the entry, and refuses one outside it
+  writeFileSync(join(tmp, "abs.bend"), `import Base\nimport ${join(tmp, "plain.bend")} as P\n`);
+  expect(Object.keys(packageFiles(join(tmp, "abs.bend"))).sort()).toEqual(["abs.bend", "plain.bend"]);
+  const away = mkdtempSync(join(tmpdir(), "bend-hash-away-"));
+  writeFileSync(join(away, "far.bend"), "import Base\n");
+  writeFileSync(join(tmp, "far.bend"), `import Base\nimport ${join(away, "far.bend")} as F\n`);
+  expect(() => packageFiles(join(tmp, "far.bend"))).toThrow(/outside the entry directory/);
 });
 
 test("hash: a missing, non-file or climbing entry is a typed usage error, exit 2, no stack", () => {

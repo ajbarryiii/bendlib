@@ -19,7 +19,6 @@ function nodesOf(i: number): Node[] | null {
   return parsed.get(i)!;
 }
 
-
 function shapeSearch(q: string, lawsOnly: boolean): number[] {
   const pat: Pattern = compile(q);
   const out: number[] = [];
