@@ -213,50 +213,6 @@ def internal_length_odds_le(~A: Data, +xs: List<&2, A>) -> {Nat.is_le(List.lengt
         case +y <> +t:
           MNat.succ_le_succ(List.length(&2, A, MPerm.odds(A, t)), 1n+List.length(&2, A, t), MNat.le_trans(List.length(&2, A, MPerm.odds(A, t)), List.length(&2, A, t), 1n+List.length(&2, A, t), internal_length_odds_le(~A, t), MNat.le_succ(List.length(&2, A, t))))
 
-def internal_least_evens(~A: Data, ~le: A -> A -> Bool, +xs: List<&2, A>, +lo: A, +h: internal_least(~A, ~le, lo, xs)) -> internal_least(~A, ~le, lo, MPerm.evens(A, xs)):
-  match xs:
-    case Nil{}:
-      {==}
-    case +x <> +r:
-      match r:
-        case Nil{}:
-          h
-        case +y <> +t:
-          internal_least_intro(~A, ~le, lo, x, MPerm.evens(A, t), internal_least_cons_le(~A, ~le, lo, x, r, h), internal_least_evens(~A, ~le, t, lo, internal_least_cons_tail(~A, ~le, lo, y, t, internal_least_cons_tail(~A, ~le, lo, x, r, h))))
-
-def internal_least_odds(~A: Data, ~le: A -> A -> Bool, +xs: List<&2, A>, +lo: A, +h: internal_least(~A, ~le, lo, xs)) -> internal_least(~A, ~le, lo, MPerm.odds(A, xs)):
-  match xs:
-    case Nil{}:
-      {==}
-    case +x <> +r:
-      match r:
-        case Nil{}:
-          {==}
-        case +y <> +t:
-          internal_least_intro(~A, ~le, lo, y, MPerm.odds(A, t), internal_least_cons_le(~A, ~le, lo, y, t, internal_least_cons_tail(~A, ~le, lo, x, r, h)), internal_least_odds(~A, ~le, t, lo, internal_least_cons_tail(~A, ~le, lo, y, t, internal_least_cons_tail(~A, ~le, lo, x, r, h))))
-
-def internal_evens_sorted(~A: Data, ~le: A -> A -> Bool, ~le_trans: @x: A -> @y: A -> @z: A -> {le(x, y) == True{} : Bool} -> {le(y, z) == True{} : Bool} -> {le(x, z) == True{} : Bool}, +xs: List<&2, A>, +h: MList.sorted_by(~A, ~le, xs)) -> MList.sorted_by(~A, ~le, MPerm.evens(A, xs)):
-  match xs:
-    case Nil{}:
-      {==}
-    case +x <> +r:
-      match r:
-        case Nil{}:
-          h
-        case +y <> +t:
-          internal_sorted_cons_of_least(~A, ~le, x, MPerm.evens(A, t), internal_least_evens(~A, ~le, t, x, internal_least_cons_tail(~A, ~le, x, y, t, internal_sorted_least_head(~A, ~le, ~le_trans, y <> t, x, h))), internal_evens_sorted(~A, ~le, ~le_trans, t, internal_sorted_tail(~A, ~le, y, t, internal_sorted_cons_cons_elim_tail(~A, ~le, x, y, t, h))))
-
-def internal_odds_sorted(~A: Data, ~le: A -> A -> Bool, ~le_trans: @x: A -> @y: A -> @z: A -> {le(x, y) == True{} : Bool} -> {le(y, z) == True{} : Bool} -> {le(x, z) == True{} : Bool}, +xs: List<&2, A>, +h: MList.sorted_by(~A, ~le, xs)) -> MList.sorted_by(~A, ~le, MPerm.odds(A, xs)):
-  match xs:
-    case Nil{}:
-      {==}
-    case +x <> +r:
-      match r:
-        case Nil{}:
-          {==}
-        case +y <> +t:
-          internal_sorted_cons_of_least(~A, ~le, y, MPerm.odds(A, t), internal_least_odds(~A, ~le, t, y, internal_sorted_least_head(~A, ~le, ~le_trans, t, y, internal_sorted_cons_cons_elim_tail(~A, ~le, x, y, t, h))), internal_odds_sorted(~A, ~le, ~le_trans, t, internal_sorted_tail(~A, ~le, y, t, internal_sorted_cons_cons_elim_tail(~A, ~le, x, y, t, h))))
-
 # Merge sort returns a sorted list once the fuel reaches the input length (invariant: length <= fuel+1).
 def msort_by_sorted(~A: Data, ~le: A -> A -> Bool, ~le_trans: @x: A -> @y: A -> @z: A -> {le(x, y) == True{} : Bool} -> {le(y, z) == True{} : Bool} -> {le(x, z) == True{} : Bool}, ~le_total: @x: A -> @y: A -> {le(x, y) == False{} : Bool} -> {le(y, x) == True{} : Bool}, fuel: Nat, +xs: List<&2, A>, +h: {Nat.is_le(List.length(&2, A, xs), 1n+fuel) == True{} : Bool}) -> MList.sorted_by(~A, ~le, MPerm.msort_by(~A, ~le, fuel, xs)):
   match fuel:

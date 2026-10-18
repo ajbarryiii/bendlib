@@ -124,3 +124,7 @@ law le_total_true_sym:
 
 def le_total_true_sym(A, le, le_total, a, b):
   Equal.sym(Bool, Bool.or(le(a, b), le(b, a)), True{}, le_total_true(~A, ~le, ~le_total, a, b))
+
+# Calls of the twins, as the calls above the generated section make of their laws (PLAN F38).
+def internal_nat_le_total_true_sym(+a: Nat, +b: Nat) -> {True{} == Bool.or(Nat.is_le(a, b), Nat.is_le(b, a)) : Bool}:
+  le_total_true_sym(~Nat, ~Nat.is_le, ~internal_nat_le_total, a, b)

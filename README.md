@@ -82,9 +82,12 @@ changes your laws fail to notice. Details: [tools/lawcheck](tools/lawcheck).
   `equal`, `perm` and the kernel package pass. `algebra`, `order` and `sort` wait on `--verdict`'s
   model search, which picks a model for each `~` constant of a law in turn, so constants that only
   fit together get none ([diagnosis](https://github.com/bendlang/bend/pull/1263), related to
-  [bendlang/bend#1182](https://github.com/bendlang/bend/issues/1182)); with that search fixed, every
-  module passes. Meanwhile CI runs the kernel itself on everything else in those files. Until then a file checked with `--verdict` cannot import `algebra`, `order`,
-  `sort` or `all`: `--verdict` rejects a file when any def of a module it imports is out of scope.
+  [bendlang/bend#1182](https://github.com/bendlang/bend/issues/1182)). Bend's main branch takes a
+  model from a concrete call of the law ([bendlang/bend#1580](https://github.com/bendlang/bend/pull/1580)),
+  and with the Nat calls these modules carry, every module passes `--verdict` there, so the next
+  Bend release lifts this. Until then CI runs the kernel itself on everything else in those files,
+  and a file checked with `--verdict` cannot import `algebra`, `order`, `sort` or `all`:
+  `--verdict` rejects a file when any def of a module it imports is out of scope.
 - **Built for AI provers too.** Mathlib-standard names, one-line statements, generated
   `_sym` twins for the rewrite direction that simplifies.
 

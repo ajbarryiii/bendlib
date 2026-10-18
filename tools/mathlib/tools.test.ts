@@ -29,6 +29,25 @@ test("check: the good fixture is green on the pinned compiler", () => {
   expect(r.code).toBe(0);
 });
 
+test("twins gives a handwritten Nat call of a twinned law its twin's call, so --verdict finds a model (planted negative)", () => {
+  const tmp = mkdtempSync(join(tmpdir(), "bend-twins-call-"));
+  const src = join(tmp, "m.bend");
+  writeFileSync(src, [
+    "import Base", "",
+    "# Applying f to zero gives its value at zero.", "law at_zero:", "  for ~f: Nat -> Nat", "  {f(0n) == f(0n) : Nat}", "",
+    "def at_zero(f):", "  {==}", "",
+    "def internal_nat_at_zero() -> {Nat.add(0n, 0n) == Nat.add(0n, 0n) : Nat}:", "  at_zero(~(x => Nat.add(x, 0n)))", "",
+    "def internal_not_a_call(n: Nat) -> {n == n : Nat}:", "  {==}", "",
+  ].join("\n"));
+  expect(run("twins.ts", tmp).code).toBe(0);
+  const text = readFileSync(src, "utf8");
+  expect(text).toContain("def internal_nat_at_zero_sym() -> {Nat.add(0n, 0n) == Nat.add(0n, 0n) : Nat}:\n  at_zero_sym(~(x => Nat.add(x, 0n)))");
+  expect(text).not.toContain("internal_not_a_call_sym");
+  const p = Bun.spawnSync([BEND, src, "--check-only"], { env: { ...process.env, BEND_NO_TELEMETRY: "1" } });
+  expect(new TextDecoder().decode(p.stdout)).toContain("ALL PROOFS CHECK");
+  expect(run("twins.ts", tmp, "--check").code).toBe(0);
+});
+
 test("check: a missing compiler is a toolchain error, exit 2, no stack (planted negative)", () => {
   const r = runWith({ BEND_CLI: "/nonexistent/bend" }, "check.ts", join(dir, "fixtures/good"));
   expect(r.code).toBe(2);

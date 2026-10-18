@@ -30,6 +30,7 @@ for (const file of files) {
   // Parse only the handwritten part so twins are never twinned.
   const mod = parseModule(file, handwritten);
   const out: string[] = [];
+  const twinned = new Set<string>();
   for (const law of mod.laws) {
     if (law.name.startsWith("internal_") || law.name.endsWith("_sym") || law.exs.length > 0 || !law.proof) continue;
     if (law.binders.some((b) => b.where) || law.claimLines.length !== 1) continue;
@@ -49,7 +50,21 @@ for (const file of files) {
       `  Equal.sym(${eq.type}, ${eq.lhs}, ${eq.rhs}, ${law.name}(${callArgs.join(", ")}))`,
       ``,
     );
+    twinned.add(law.name);
   }
+  // --verdict takes a ~ constant's model from a call of its law (PLAN F38), so each handwritten
+  // `internal_` def that is one call of a twinned law with `~` arguments gets the twin's call.
+  const calls: string[] = [];
+  for (const d of mod.defs) {
+    const body = d.body.map((l) => l.trim()).filter(Boolean);
+    const head = /^def (internal_\w+)\((.*)\) -> (\{.*\}):$/.exec(d.header.trim());
+    const call = body.length === 1 ? /^(\w+)\((~.*)\)$/.exec(body[0]!) : null;
+    if (head === null || call === null || !twinned.has(call[1]!)) continue;
+    const eq = splitEquation(head[3]!);
+    if (!eq) continue;
+    calls.push(`def ${head[1]}_sym(${head[2]}) -> {${eq.rhs} == ${eq.lhs} : ${eq.type}}:`, `  ${call[1]}_sym(${call[2]})`, ``);
+  }
+  if (calls.length) out.push(`# Calls of the twins, as the calls above the generated section make of their laws (PLAN F38).`, ...calls);
   // A module with no twins and no generated section is already up to date, even when byte-empty.
   const next = out.length === 0
     ? (cut < 0 ? text : handwritten)

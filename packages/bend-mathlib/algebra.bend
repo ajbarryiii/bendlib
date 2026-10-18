@@ -91,6 +91,9 @@ def internal_nat_add_assoc(x: Nat, y: Nat, z: Nat) -> {Nat.add(Nat.add(x, y), z)
 def internal_nat_add_comm(x: Nat, y: Nat) -> {Nat.add(x, y) == Nat.add(y, x) : Nat}:
   MNat.add_comm(x, y)
 
+def internal_nat_zero_add(x: Nat) -> {Nat.add(0n, x) == x : Nat}:
+  MNat.zero_add(x)
+
 def internal_nat_mul(x: Nat, y: Nat) -> Nat:
   Nat.mul(x, y)
 
@@ -250,6 +253,10 @@ law foldl_op_eq_foldr_op:
 def foldl_op_eq_foldr_op(B, op, assoc, comm, z, id, xs):
   %Equal.sym(B, List.foldl(&2, B, B, op, xs, z), op(z, List.foldr(&2, B, B, op, xs, z)), internal_foldl_foldr(~B, ~op, ~assoc, ~comm, ~z, ~id, xs, z)) : {_ == List.foldr(&2, B, B, op, xs, z) : B}
   id(List.foldr(&2, B, B, op, xs, z))
+
+# A Nat call: --verdict takes a ~ constant's model from a call of its law (PLAN F38).
+def internal_nat_foldl_op_eq_foldr_op(+xs: List<&2, Nat>) -> {List.foldl(&2, Nat, Nat, Nat.add, xs, 0n) == List.foldr(&2, Nat, Nat, Nat.add, xs, 0n) : Nat}:
+  foldl_op_eq_foldr_op(~Nat, ~Nat.add, ~internal_nat_add_assoc, ~internal_nat_add_comm, ~0n, ~internal_nat_zero_add, xs)
 
 def internal_foldl_assoc(~B: Data, ~op: B -> B -> B, ~assoc: @x: B -> @y: B -> @z: B -> {op(op(x, y), z) == op(x, op(y, z)) : B}, +xs: List<&2, B>, +a: B, +b: B) -> {List.foldl(&2, B, B, op, xs, op(a, b)) == op(a, List.foldl(&2, B, B, op, xs, b)) : B}:
   match xs:
@@ -493,3 +500,7 @@ law foldl_eq_foldr_sym:
 
 def foldl_eq_foldr_sym(B, op, assoc, comm, z, xs):
   Equal.sym(B, List.foldl(&2, B, B, op, xs, z), List.foldr(&2, B, B, op, xs, z), foldl_eq_foldr(~B, ~op, ~assoc, ~comm, z, xs))
+
+# Calls of the twins, as the calls above the generated section make of their laws (PLAN F38).
+def internal_nat_foldl_op_eq_foldr_op_sym(+xs: List<&2, Nat>) -> {List.foldr(&2, Nat, Nat, Nat.add, xs, 0n) == List.foldl(&2, Nat, Nat, Nat.add, xs, 0n) : Nat}:
+  foldl_op_eq_foldr_op_sym(~Nat, ~Nat.add, ~internal_nat_add_assoc, ~internal_nat_add_comm, ~0n, ~internal_nat_zero_add, xs)
