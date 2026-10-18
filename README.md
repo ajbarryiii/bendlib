@@ -83,7 +83,7 @@ changes your laws fail to notice. Details: [tools/lawcheck](tools/lawcheck).
   model search, which picks a model for each `~` constant of a law in turn, so constants that only
   fit together get none ([diagnosis](https://github.com/bendlang/bend/pull/1263), related to
   [bendlang/bend#1182](https://github.com/bendlang/bend/issues/1182)); with that search fixed, every
-  module passes. Until then a file checked with `--verdict` cannot import `algebra`, `order`,
+  module passes. Meanwhile CI runs the kernel itself on everything else in those files. Until then a file checked with `--verdict` cannot import `algebra`, `order`,
   `sort` or `all`: `--verdict` rejects a file when any def of a module it imports is out of scope.
 - **Built for AI provers too.** Mathlib-standard names, one-line statements, generated
   `_sym` twins for the rewrite direction that simplifies.

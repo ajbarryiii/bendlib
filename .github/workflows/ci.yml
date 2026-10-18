@@ -153,12 +153,18 @@ jobs:
           done
           # algebra, order, sort, all: --verdict picks each ~ constant's model in turn, so constants that only fit
           # together get none (bendlang/bend#1263, #1182); any other out-of-scope reason is ours to fix (PLAN F38)
+          # --verdict stops at the first out-of-scope def, so the kernel checks the rest of the file directly;
+          # the binary is the one --verdict built above (safe.ts kernel_bin: sha256 of Lean version, NUL, bendtt.lean)
+          kernel="$HOME/.bend/bendtt/$(python3 -c 'import hashlib,os;t=open(os.path.expanduser("~/.bend/bend2/bendtt.lean"),"rb").read();print(hashlib.sha256(b"4.34.0\0"+t).hexdigest()[:16])')/bendtt"
+          [ -x "$kernel" ] || { echo "no kernel at $kernel"; exit 1; }
           for f in packages/bend-mathlib/{algebra,order,sort,all}.bend; do
             out=$(verdict "$f") && { echo "$f now passes --verdict: move it to the list above"; exit 1; }
             echo "$out" | grep -q "mismatch between the TypeScript implementation" || { echo "$f: $out"; exit 1; }
-            other=$(bun tools/mathlib/devlib.ts run -- "$HOME/.bend/bin/bend" "$f" -o "${RUNNER_TEMP:-/tmp}/verdict.bendtt" 2>&1 | grep '^- ' | grep -v ': no model for ' || true)
+            tt="${RUNNER_TEMP:-/tmp}/verdict.bendtt"
+            other=$(bun tools/mathlib/devlib.ts run -- "$HOME/.bend/bin/bend" "$f" -o "$tt" 2>&1 | grep '^- ' | grep -v ': no model for ' || true)
             [ -z "$other" ] || { echo "$f is out of scope for a reason other than #1182:"; echo "$other"; exit 1; }
-            echo "blocked upstream $f"
+            kout=$(LEAN_STACK_SIZE_KB=4194304 "$kernel" "$tt" 2>&1) && [ "$kout" = "ALL PROOFS CHECK" ] || { echo "$f: the kernel rejects its in-scope defs:"; echo "$kout"; exit 1; }
+            echo "blocked upstream $f (in-scope defs kernel-checked)"
           done
 
   latest-compiler:
