@@ -40,7 +40,7 @@ If that audit trail is missing, then you must act as if the operation never happ
 ## Project Architecture
 
 bendlib is the foundation library for Bend 2 (https://github.com/bendlang/bend). Design, verified
-facts F1–F39 about bend 2.0.27 (re-run up to 2.0.37), and the build order are in `PLAN.md`; cite a fact ID in a
+facts F1–F39 about bend 2.0.27 (re-run up to 2.0.38), and the build order are in `PLAN.md`; cite a fact ID in a
 why-comment instead of re-explaining it.
 
 - **A) bend-mathlib** (`packages/bend-mathlib`, Bend): proved lemmas and Base-only predicates,
@@ -77,7 +77,7 @@ bend/
 ├── examples/demo/              before.bend after.bend demo.gif demo.mp4 demo.sh
 └── research/
     ├── experiments/            the evidence behind the facts in PLAN.md §1
-    └── candidates/             lawchecked statements waiting to be proved (mathlib-0.2/, mathlib-0.4/, perm/, predicates/) and base-next-bridges.bend
+    └── candidates/             lawchecked statements waiting to be proved (mathlib-0.2/, mathlib-0.4/, perm/, predicates/)
 ```
 
 ---

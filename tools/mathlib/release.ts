@@ -1,5 +1,6 @@
-// release: run every gate, compute the package's hub hash, publish anonymously, verify the
-// uploaded content from an empty cache, then attach the name (PLAN.md §3.5).
+// release: run every gate (`bend --verdict` on each module needs Lean v4.34.0 on PATH), compute the
+// package's hub hash, publish anonymously, verify the uploaded content from an empty cache, then
+// attach the name (PLAN.md §3.5).
 //
 // usage: bun tools/mathlib/release.ts <pkgdir> <name> <version> [--publish]
 //   without --publish: gates + expected hash + the exact commands (dry run)
@@ -55,6 +56,12 @@ export function loginError(): string | null {
     } catch {}
   }
   return "not logged in (no key in ~/.bend/bendai.json or ~/.bend/bender.json): run `bend login`";
+}
+
+/** Why `bend <module> --verdict` (the proven kernel, PLAN F35) is not exactly ALL PROOFS CHECK, else null. */
+export function verdictError(module: string): string | null {
+  const r = sh([bendBin(), module, "--verdict"]);
+  return r.code === 0 && r.out === "ALL PROOFS CHECK" ? null : `${relative(ROOT, module)} (exit ${r.code}):\n${r.out}`;
 }
 
 /** Publish, verify from an empty cache, link the name, freeze the lock, regenerate README, record it. */
@@ -122,6 +129,11 @@ async function main(): Promise<void> {
     const r = sh(cmd);
     console.log(`${r.code === 0 ? "ok  " : "FAIL"} ${label}`);
     if (r.code !== 0) fail(`${label} gate failed:\n${r.out}`);
+  }
+  for (const m of packageModules(pkg)) {
+    const err = verdictError(m);
+    console.log(`${err ? "FAIL" : "ok  "} verdict ${basename(m, ".bend")}`);
+    if (err) fail(`verdict gate failed (--verdict needs Lean v4.34.0 on PATH):\n${err}`);
   }
 
   const entry = join(pkg, "all.bend");

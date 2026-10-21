@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { hubHash, packageFiles } from "./hash.ts";
 import { baseNames, BEND, LOCK_FORMAT, parseLock, parseModule, packageModules, ROOT, type LockEntry } from "./lib.ts";
 import { lockAgainstErrors } from "./lock.ts";
-import { headerVersionError, loginError, publish, regenerateIndex } from "./release.ts";
+import { headerVersionError, loginError, publish, regenerateIndex, verdictError } from "./release.ts";
 
 const dir = import.meta.dir;
 const run = (script: string, ...args: string[]) => {
@@ -631,6 +631,31 @@ test("release: loginError is null with a key and typed without one (planted pair
     }
   } finally {
     if (saved === undefined) delete process.env.HOME; else process.env.HOME = saved;
+  }
+});
+
+test("release: verdictError accepts only exit 0 with exactly ALL PROOFS CHECK (planted negatives)", () => {
+  const tmp = mkdtempSync(join(tmpdir(), "bend-release-verdict-"));
+  const bin = join(tmp, "bend");
+  writeFileSync(bin, [
+    "#!/bin/sh",
+    '[ "$2" = --verdict ] || exit 9',
+    'case "$1" in',
+    '  *clean.bend) echo "ALL PROOFS CHECK" ;;',
+    '  *hole.bend) echo "SOME PROOFS FAIL"; echo "?goal"; exit 1 ;;',
+    '  *mismatch.bend) echo "Sorry - this is a mismatch between the TypeScript implementation, and the formalized BendTT kernel."; exit 1 ;;',
+    '  *extra.bend) echo "ALL PROOFS CHECK"; echo "Error: 1 defs rely on unsafe or foreign code:" ;;',
+    "esac",
+  ].join("\n") + "\n", { mode: 0o755 });
+  const saved = process.env.BEND_CLI;
+  try {
+    process.env.BEND_CLI = bin;
+    expect(verdictError(join(tmp, "clean.bend"))).toBeNull();
+    expect(verdictError(join(tmp, "hole.bend"))).toContain("SOME PROOFS FAIL");
+    expect(verdictError(join(tmp, "mismatch.bend"))).toContain("(exit 1):\nSorry - this is a mismatch");
+    expect(verdictError(join(tmp, "extra.bend"))).toContain("rely on unsafe");
+  } finally {
+    if (saved === undefined) delete process.env.BEND_CLI; else process.env.BEND_CLI = saved;
   }
 });
 

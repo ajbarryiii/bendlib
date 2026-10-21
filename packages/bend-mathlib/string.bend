@@ -183,7 +183,7 @@ law cmp_refl:
 def cmp_refl(s):
   Equal.sym((String & String) & Cmp, ((s, s), EQ{}), String.cmp(s, s), internal_cmp_refl(s))
 
-# Proofs about String.eq unfold String.order only through this (PLAN F39).
+# Base 2.0.38 defines String.order directly, not through String.cmp (PLAN F39); these prove the two agree.
 def internal_order_go_lt(a: String, b: String) -> {String.order.go(a, b, LT{}) == LT{} : Cmp}:
   match a b:
     case SNil{} SNil{}:
@@ -233,6 +233,7 @@ def internal_order_cmp_go(+a: String, +b: String) -> {String.order(a, b) == Pair
     case SCon{Chr{x}, t1} SCon{Chr{y}, t2}:
       internal_order_step(t1, t2, Chr{x}, Chr{y}, U32.cmp(x, y), internal_order_cmp_go(t1, t2))
 
+# Proofs about String.eq unfold String.order only through this.
 def internal_order_cmp(+a: String, +b: String) -> {Pair.snd(String & String, Cmp, String.cmp(a, b)) == String.order(a, b) : Cmp}:
   Equal.sym(Cmp, String.order(a, b), Pair.snd(String & String, Cmp, String.cmp(a, b)), internal_order_cmp_go(a, b))
 

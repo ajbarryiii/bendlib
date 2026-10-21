@@ -43,16 +43,17 @@ def false_ne_true(e: {False{} == True{} : Bool}) -> Empty:
   %e : bdisc(_)
   Unit{}
 
-law and_elim_r:
-  for a: Bool
+# Base 2.0.38 short-circuits List.all through List.all.if (PLAN F39), so the tail is split off by cases on the head's test.
+law all_if_elim:
   for b: Bool
-  for h: {Bool.and(a, b) == True{} : Bool}
-  {b == True{} : Bool}
+  for -r: Bool
+  for h: {List.all.if(u => r, b) == True{} : Bool}
+  {r == True{} : Bool}
 
-def and_elim_r(a, b, h):
-  match a:
+def all_if_elim(b, r, h):
+  match b:
     case False{}:
-      Empty.absurd({b == True{} : Bool}, false_ne_true(h))
+      Empty.absurd({r == True{} : Bool}, false_ne_true(h))
     case True{}:
       h
 
@@ -68,7 +69,7 @@ def sorted_b_tail(x, t, h):
     case Nil{}:
       {==}
     case +y <> +r:
-      and_elim_r(Nat.is_le(x, y), List.all(~&1, ~(Nat & Nat), ~(p => P1.adj_le(~Nat, ~Nat.is_le, p)), List.zip(&2, Nat, &2, Nat, y <> r, r)), h)
+      all_if_elim(Nat.is_le(x, y), List.all(~&1, ~(Nat & Nat), ~(p => P1.adj_le(~Nat, ~Nat.is_le, p)), List.zip(&2, Nat, &2, Nat, y <> r, r)), h)
 
 def wk_mem(x: Nat, xs: List<&2, Nat>, h: P1.mem(~Nat, ~Nat.is_eq, x, xs)) -> P1.mem(~Nat, ~Nat.is_eq, x, xs):
   h
