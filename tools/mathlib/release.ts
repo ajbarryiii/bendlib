@@ -130,15 +130,15 @@ async function main(): Promise<void> {
     console.log(`${r.code === 0 ? "ok  " : "FAIL"} ${label}`);
     if (r.code !== 0) fail(`${label} gate failed:\n${r.out}`);
   }
+  const entry = join(pkg, "all.bend");
+  let files: Record<string, string>;
+  try { files = packageFiles(entry); } catch (e) { if (e instanceof PkgError) usage(e.message); throw e; }
   for (const m of packageModules(pkg)) {
     const err = verdictError(m);
     console.log(`${err ? "FAIL" : "ok  "} verdict ${basename(m, ".bend")}`);
     if (err) fail(`verdict gate failed (--verdict needs Lean v4.34.0 on PATH):\n${err}`);
   }
 
-  const entry = join(pkg, "all.bend");
-  let files: Record<string, string>;
-  try { files = packageFiles(entry); } catch (e) { if (e instanceof PkgError) usage(e.message); throw e; }
   const expected = hubHash(files);
   console.log(`expected hash ${expected} (${Object.keys(files).length} files)`);
   const taken = await fetch(`${hubUrl()}/name/${name}@${version}`);
