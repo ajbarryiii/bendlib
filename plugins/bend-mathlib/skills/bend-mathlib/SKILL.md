@@ -14,8 +14,8 @@ never changes one you use. Before you prove a basic fact (`add_comm`, `append_as
 ## Import
 
 ```python
-import bend-mathlib@0.7.3.0/nat.bend as MNat
-import bend-mathlib@0.7.3.0/list.bend as MList
+import bend-mathlib@0.7.4.0/nat.bend as MNat
+import bend-mathlib@0.7.4.0/list.bend as MList
 ```
 
 Modules: `nat`, `bool`, `list`, `string`, `maybe`, `equal`, `order`, `algebra` (laws), `perm`
@@ -25,7 +25,7 @@ Every module passes `bend --verdict` on Bend 2.0.38, so a project that checks wi
 any of them (on 2.0.37 and earlier, `algebra`, `order`, `sort` and `all` were out of the kernel's
 scope, bendlang/bend#1182).
 Pin by content hash if you want bytes that can never change:
-`import 0xf8a2f05bbfb67041ce3d1eaece892a1a/nat.bend as MNat`.
+`import 0xcdaf59a0332a2e0cdb289bf7a32fba62/nat.bend as MNat`.
 
 ## Find a lemma
 
@@ -56,12 +56,12 @@ MSort.sort_by_sorted_nat(xs)              # MList.sorted_by(~Nat, ~Nat.is_le, MP
 
 `%e : P` rewrites with the equation `e` inside the goal `P`: it replaces the right side of `e` with
 its left side, at the spot marked `_`. Use the `_sym` twin to rewrite the other way. A worked proof
-(checks on bend 2.0.36 and 2.0.37):
+(checks on bend 2.0.38):
 
 ```python
 import Base
-import bend-mathlib@0.7.3.0/nat.bend as MNat
-import bend-mathlib@0.7.3.0/list.bend as MList
+import bend-mathlib@0.7.4.0/nat.bend as MNat
+import bend-mathlib@0.7.4.0/list.bend as MList
 
 law rev_len:
   for +xs: List<&2, U32>
