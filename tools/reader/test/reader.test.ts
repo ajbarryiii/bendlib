@@ -1,4 +1,4 @@
-// Tests for @bendlib/reader against the installed bend (goldens are for 2.0.37).
+// Tests for @bendlib/reader against the installed bend (goldens are for 2.0.38).
 // usage: cd tools/reader && bun test   (network: first source fetch + hub package)
 
 import { describe, expect, test } from "bun:test";
@@ -133,7 +133,7 @@ describe("source", () => {
   });
 });
 
-describe("goldens (bend 2.0.37)", () => {
+describe("goldens (bend 2.0.38)", () => {
   for (const c of CASES) {
     test(`${c.name}: ${c.file}`, async () => {
       const golden = JSON.parse(fs.readFileSync(goldenPath(c), "utf8"));
