@@ -151,7 +151,7 @@ their expected output, and what not to do. Read the whole bead before starting.
    Beads labelled `owner` need contact with people or a purchase: never start them. Beads labelled
    `release` publish to BendHub, `bend link`, tag or create GitHub releases: take them only when
    every dependency is closed and the full gate is green on `origin/main` (PLAN §9 D-release). `br show <id>`, then `br update <id> --status in_progress`.
-2. Environment: `~/.bend/bin/bend version` must print `bend 2.0.37` (else `bun tools/install-bend.ts`).
+2. Environment: `~/.bend/bin/bend version` must print `bend 2.0.38` (else `bun tools/install-bend.ts`).
    Run commands from the repository root. For Bend itself: `bend guide`, `bend base <Name>` (e.g.
    `bend base List`), and `~/.claude/skills/bend2-mega-skill/references/` (`CHEATSHEET.md`,
    `LAWS-AND-PROOFS.md`, `PROOF-COOKBOOK.md`, `ERROR-TAXONOMY.md`).

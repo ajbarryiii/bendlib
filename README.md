@@ -78,16 +78,11 @@ changes your laws fail to notice. Details: [tools/lawcheck](tools/lawcheck).
 - **Zero `@unsafe`.** Every module must print exactly `ALL PROOFS CHECK` (and its `--verdict`
   hint line) on the pinned compiler.
 - **Checked by the proven kernel.** CI also runs `bend --verdict`, which re-checks every proof in
-  BendTT, the kernel whose soundness is proved in Lean: `nat`, `list`, `bool`, `string`, `maybe`,
-  `equal`, `perm` and the kernel package pass. `algebra`, `order` and `sort` wait on `--verdict`'s
-  model search, which picks a model for each `~` constant of a law in turn, so constants that only
-  fit together get none ([diagnosis](https://github.com/bendlang/bend/pull/1263), related to
-  [bendlang/bend#1182](https://github.com/bendlang/bend/issues/1182)). Bend's main branch takes a
-  model from a concrete call of the law ([bendlang/bend#1580](https://github.com/bendlang/bend/pull/1580)),
-  and with the Nat calls these modules carry, every module passes `--verdict` there, so the next
-  Bend release lifts this. Until then CI runs the kernel itself on everything else in those files,
-  and a file checked with `--verdict` cannot import `algebra`, `order`, `sort` or `all`:
-  `--verdict` rejects a file when any def of a module it imports is out of scope.
+  BendTT, the kernel whose soundness is proved in Lean: every module and the kernel package pass
+  on Bend 2.0.38, which takes a `~` constant's model from a concrete call of its law
+  ([bendlang/bend#1580](https://github.com/bendlang/bend/pull/1580); before it, `algebra`, `order`,
+  `sort` and `all` were out of scope, [bendlang/bend#1182](https://github.com/bendlang/bend/issues/1182)).
+  So a file checked with `--verdict` can import any of them.
 - **Built for AI provers too.** Mathlib-standard names, one-line statements, generated
   `_sym` twins for the rewrite direction that simplifies.
 

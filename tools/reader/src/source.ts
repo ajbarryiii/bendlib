@@ -90,7 +90,7 @@ function resolveBend(bin?: string): { path: string; version: string } {
   throw new SourceError("cannot determine the installed bend version (`bend version`):\n  " + errs.join("\n  "));
 }
 
-/** `bend version` of BEND_BIN, else ~/.bend/bin/bend, else `bend` on PATH, e.g. "2.0.37". */
+/** `bend version` of BEND_BIN, else ~/.bend/bin/bend, else `bend` on PATH, e.g. "2.0.38". */
 export function installedVersion(bin?: string): string {
   return resolveBend(bin).version;
 }

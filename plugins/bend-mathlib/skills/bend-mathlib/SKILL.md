@@ -21,9 +21,9 @@ import bend-mathlib@0.7.3.0/list.bend as MList
 Modules: `nat`, `bool`, `list`, `string`, `maybe`, `equal`, `order`, `algebra` (laws), `perm`
 (permutations, `insert_by`/`isort_by`/`merge_by`/`sort_by`) and `sort` (those sorts return sorted
 lists).
-If the project checks with `bend --verdict`, import only `nat`, `bool`, `list`, `string`, `maybe`,
-`equal` and `perm`: `--verdict` rejects a file when any def of an imported module is out of the
-kernel's scope, which `algebra`, `order`, `sort` and `all` are until upstream fixes bendlang/bend#1182.
+Every module passes `bend --verdict` on Bend 2.0.38, so a project that checks with it can import
+any of them (on 2.0.37 and earlier, `algebra`, `order`, `sort` and `all` were out of the kernel's
+scope, bendlang/bend#1182).
 Pin by content hash if you want bytes that can never change:
 `import 0xf8a2f05bbfb67041ce3d1eaece892a1a/nat.bend as MNat`.
 
