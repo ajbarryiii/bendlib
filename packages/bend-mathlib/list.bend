@@ -832,6 +832,11 @@ def internal_sorted_cons_false(~A: Data, ~le: A -> A -> Bool, -x: A, -y: A, z: L
   %Equal.sym(Bool, le(x, y), False{}, e) : {False{} == List.all.if(u => List.all(~&1, ~(A & A), ~(p => le(Pair.fst(A, A, p), Pair.snd(A, A, p))), z), _) : Bool}
   {==}
 
+# The cons step of sorted_by's pairs with the head written as (x, y): internal_all_cons_test at a variable pair head is outside what --verdict can check.
+def internal_sorted_cons_test(~A: Data, ~le: A -> A -> Bool, -x: A, -y: A, -z: List<&1, A & A>, b: Bool, e: {le(x, y) == b : Bool}) -> {Bool.and(b, List.all(~&1, ~(A & A), ~(p => le(Pair.fst(A, A, p), Pair.snd(A, A, p))), z)) == List.all(~&1, ~(A & A), ~(p => le(Pair.fst(A, A, p), Pair.snd(A, A, p))), (x, y) <> z) : Bool}:
+  %Equal.sym(Bool, le(x, y), b, e) : {Bool.and(b, List.all(~&1, ~(A & A), ~(p => le(Pair.fst(A, A, p), Pair.snd(A, A, p))), z)) == List.all.if(u => List.all(~&1, ~(A & A), ~(p => le(Pair.fst(A, A, p), Pair.snd(A, A, p))), z), _) : Bool}
+  internal_all_if(b, List.all(~&1, ~(A & A), ~(p => le(Pair.fst(A, A, p), Pair.snd(A, A, p))), z))
+
 # A Nat list sorted by Nat.is_le stays sorted under a head that is <= the next element.
 law sorted_cons_cons_intro:
   for -x: Nat
@@ -863,7 +868,7 @@ law sorted_cons_cons_elim_le:
 def sorted_cons_cons_elim_le(x, y, t, h):
   +x = x
   +y = y
-  internal_and_left(Nat.is_le(x, y), List.all(~&1, ~(Nat & Nat), ~(p => Nat.is_le(Pair.fst(Nat, Nat, p), Pair.snd(Nat, Nat, p))), List.zip(&2, Nat, &2, Nat, y <> t, t)), Equal.trans(Bool, Bool.and(Nat.is_le(x, y), List.all(~&1, ~(Nat & Nat), ~(p => Nat.is_le(Pair.fst(Nat, Nat, p), Pair.snd(Nat, Nat, p))), List.zip(&2, Nat, &2, Nat, y <> t, t))), List.all(~&1, ~(Nat & Nat), ~(p => Nat.is_le(Pair.fst(Nat, Nat, p), Pair.snd(Nat, Nat, p))), (x, y) <> List.zip(&2, Nat, &2, Nat, y <> t, t)), True{}, internal_all_cons_test(~&1, ~(Nat & Nat), ~(p => Nat.is_le(Pair.fst(Nat, Nat, p), Pair.snd(Nat, Nat, p))), (x, y), List.zip(&2, Nat, &2, Nat, y <> t, t), Nat.is_le(x, y), {==}), h))
+  internal_and_left(Nat.is_le(x, y), List.all(~&1, ~(Nat & Nat), ~(p => Nat.is_le(Pair.fst(Nat, Nat, p), Pair.snd(Nat, Nat, p))), List.zip(&2, Nat, &2, Nat, y <> t, t)), Equal.trans(Bool, Bool.and(Nat.is_le(x, y), List.all(~&1, ~(Nat & Nat), ~(p => Nat.is_le(Pair.fst(Nat, Nat, p), Pair.snd(Nat, Nat, p))), List.zip(&2, Nat, &2, Nat, y <> t, t))), List.all(~&1, ~(Nat & Nat), ~(p => Nat.is_le(Pair.fst(Nat, Nat, p), Pair.snd(Nat, Nat, p))), (x, y) <> List.zip(&2, Nat, &2, Nat, y <> t, t)), True{}, internal_sorted_cons_test(~Nat, ~Nat.is_le, x, y, List.zip(&2, Nat, &2, Nat, y <> t, t), Nat.is_le(x, y), {==}), h))
 
 # The tail of a Nat list of two or more elements sorted by Nat.is_le is sorted.
 law sorted_cons_cons_elim_tail:
@@ -876,7 +881,7 @@ law sorted_cons_cons_elim_tail:
 def sorted_cons_cons_elim_tail(x, y, t, h):
   +x = x
   +y = y
-  internal_and_right(Nat.is_le(x, y), List.all(~&1, ~(Nat & Nat), ~(p => Nat.is_le(Pair.fst(Nat, Nat, p), Pair.snd(Nat, Nat, p))), List.zip(&2, Nat, &2, Nat, y <> t, t)), Equal.trans(Bool, Bool.and(Nat.is_le(x, y), List.all(~&1, ~(Nat & Nat), ~(p => Nat.is_le(Pair.fst(Nat, Nat, p), Pair.snd(Nat, Nat, p))), List.zip(&2, Nat, &2, Nat, y <> t, t))), List.all(~&1, ~(Nat & Nat), ~(p => Nat.is_le(Pair.fst(Nat, Nat, p), Pair.snd(Nat, Nat, p))), (x, y) <> List.zip(&2, Nat, &2, Nat, y <> t, t)), True{}, internal_all_cons_test(~&1, ~(Nat & Nat), ~(p => Nat.is_le(Pair.fst(Nat, Nat, p), Pair.snd(Nat, Nat, p))), (x, y), List.zip(&2, Nat, &2, Nat, y <> t, t), Nat.is_le(x, y), {==}), h))
+  internal_and_right(Nat.is_le(x, y), List.all(~&1, ~(Nat & Nat), ~(p => Nat.is_le(Pair.fst(Nat, Nat, p), Pair.snd(Nat, Nat, p))), List.zip(&2, Nat, &2, Nat, y <> t, t)), Equal.trans(Bool, Bool.and(Nat.is_le(x, y), List.all(~&1, ~(Nat & Nat), ~(p => Nat.is_le(Pair.fst(Nat, Nat, p), Pair.snd(Nat, Nat, p))), List.zip(&2, Nat, &2, Nat, y <> t, t))), List.all(~&1, ~(Nat & Nat), ~(p => Nat.is_le(Pair.fst(Nat, Nat, p), Pair.snd(Nat, Nat, p))), (x, y) <> List.zip(&2, Nat, &2, Nat, y <> t, t)), True{}, internal_sorted_cons_test(~Nat, ~Nat.is_le, x, y, List.zip(&2, Nat, &2, Nat, y <> t, t), Nat.is_le(x, y), {==}), h))
 
 # The tail of a nonempty Nat list sorted by Nat.is_le is sorted.
 law sorted_tail:
