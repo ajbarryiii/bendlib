@@ -123,7 +123,7 @@ async function main(): Promise<void> {
     ["lock", [process.execPath, "tools/mathlib/lock.ts", pkg, "--check"]],
   ];
   for (const m of packageModules(pkg)) {
-    gates.push(["lawcheck " + basename(m, ".bend"), [process.execPath, "tools/lawcheck/cli.ts", m, "--max-instances", "100", "--strict", "--allow-skip", "cong2,eq_true_of_ne_false,foldl_eq_foldr,foldl_eq_foldr_sym,foldl_op_eq_foldr_op,foldl_op_eq_foldr_op_sym,le_antisymm_eq,le_total,le_total_d,le_total_of_not_le,le_total_true,le_total_true_sym,le_trans3,le_trans4,maybe_bind_assoc,maybe_bind_assoc_sym,maybe_bind_map,maybe_bind_map_sym,maybe_map_bind,maybe_map_bind_sym,maybe_map_compose,maybe_map_compose_sym,maybe_map_pure,maybe_map_pure_sym,maybe_pure_bind,maybe_pure_bind_sym,op_assoc4,op_assoc4_sym,op_comm3,op_comm3_sym,op_four,op_four_sym,op_left_comm,op_left_comm_sym,op_right_comm,op_right_comm_sym,subst"]]);
+    gates.push(["lawcheck " + basename(m, ".bend"), [process.execPath, "tools/lawcheck/cli.ts", m, "--max-instances", "100", "--strict", "--allow-skip", "cong2,eq_true_of_ne_false,foldl_eq_foldr,foldl_eq_foldr_sym,foldl_op_eq_foldr_op,foldl_op_eq_foldr_op_sym,le_antisymm_eq,le_total,le_total_d,le_total_of_not_le,le_total_true,le_total_true_sym,le_trans3,le_trans4,maybe_bind_assoc,maybe_bind_assoc_sym,maybe_bind_map,maybe_bind_map_sym,maybe_map_bind,maybe_map_bind_sym,maybe_map_compose,maybe_map_compose_sym,maybe_map_pure,maybe_map_pure_sym,maybe_pure_bind,maybe_pure_bind_sym,op_assoc4,op_assoc4_sym,op_comm3,op_comm3_sym,op_four,op_four_sym,op_left_comm,op_left_comm_sym,op_right_comm,op_right_comm_sym,sorted_append,subst"]]);
   }
   for (const [label, cmd] of gates) {
     const r = sh(cmd);

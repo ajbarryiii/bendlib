@@ -1681,6 +1681,12 @@
       "sha256": "7ce131fec1ceea31940a8540407b352c7842a44b241e0edcf2c3657465513306",
       "since": "0.2.0.0"
     },
+    "list.sorted_append": {
+      "kind": "law",
+      "text": "for xs: List<&2, Nat>\nfor ys: List<&2, Nat>\nfor bnd: @x: Nat -> @y: Nat -> mem(~Nat, ~Nat.is_eq, x, xs) -> mem(~Nat, ~Nat.is_eq, y, ys) -> MNat.le(x, y)\nfor hx: sorted_by(~Nat, ~Nat.is_le, xs)\nfor hy: sorted_by(~Nat, ~Nat.is_le, ys)\nsorted_by(~Nat, ~Nat.is_le, List.append(&2, Nat, xs, ys))",
+      "sha256": "e801144e7d2bb62ffcaadc34c06f5bb7e59e610470d2e988221d81454fea1c37",
+      "since": null
+    },
     "list.sorted_by": {
       "kind": "predicate",
       "text": "def sorted_by(~A: Data, ~le: A -> A -> Bool, +xs: List<&2, A>) -> Data:\n{List.all(~&1, ~(A & A), ~(p => le(Pair.fst(A, A, p), Pair.snd(A, A, p))), List.zip(&2, A, &2, A, xs, List.tail(&2, A, xs))) == True{} : Bool}",
@@ -1705,6 +1711,30 @@
       "sha256": "ca552207ce7aab25b8f9251903b81854b87af897de3f4a048ff346e90e78ff30",
       "since": "0.3.0.0"
     },
+    "list.sorted_drop": {
+      "kind": "law",
+      "text": "for xs: List<&2, Nat>\nfor n: Nat\nfor h: sorted_by(~Nat, ~Nat.is_le, xs)\nsorted_by(~Nat, ~Nat.is_le, List.drop(&2, Nat, xs, n))",
+      "sha256": "93c64be77cae194c3e46d1e42430b049b091d31b42d07a3680475b6fa13c2568",
+      "since": null
+    },
+    "list.sorted_filter": {
+      "kind": "law",
+      "text": "for ~f: Nat -> Bool\nfor xs: List<&2, Nat>\nfor h: sorted_by(~Nat, ~Nat.is_le, xs)\nsorted_by(~Nat, ~Nat.is_le, List.filter(~Nat, ~f, xs))",
+      "sha256": "c015428ddd7511d0612879afc842b4c1460112f8d6a4c07c761aa91abef59669",
+      "since": null
+    },
+    "list.sorted_head_le_mem": {
+      "kind": "law",
+      "text": "for x: Nat\nfor xs: List<&2, Nat>\nfor y: Nat\nfor hs: sorted_by(~Nat, ~Nat.is_le, x <> xs)\nfor hm: mem(~Nat, ~Nat.is_eq, y, xs)\nMNat.le(x, y)",
+      "sha256": "f4ba052fb37e897db96ab29583cd8dd60ab4e0898e07dadcc8f5963ec66d0c77",
+      "since": null
+    },
+    "list.sorted_le_of_mem": {
+      "kind": "law",
+      "text": "for x: Nat\nfor xs: List<&2, Nat>\nfor y: Nat\nfor hs: sorted_by(~Nat, ~Nat.is_le, x <> xs)\nfor hm: mem(~Nat, ~Nat.is_eq, y, x <> xs)\nMNat.le(x, y)",
+      "sha256": "d27b39ec1cb74213339df145aaab9834287fd8871089715c38b32831005bccbd",
+      "since": null
+    },
     "list.sorted_nil": {
       "kind": "law",
       "text": "sorted_by(~Nat, ~Nat.is_le, Nil{})",
@@ -1722,6 +1752,12 @@
       "text": "for x: Nat\nfor xs: List<&2, Nat>\nfor h: sorted_by(~Nat, ~Nat.is_le, x <> xs)\nsorted_by(~Nat, ~Nat.is_le, xs)",
       "sha256": "0ab29cd7235c752c6145c79e628b4bd4eebf43d6f53e6b9402b72436dfdd4325",
       "since": "0.3.0.0"
+    },
+    "list.sorted_take": {
+      "kind": "law",
+      "text": "for xs: List<&2, Nat>\nfor n: Nat\nfor h: sorted_by(~Nat, ~Nat.is_le, xs)\nsorted_by(~Nat, ~Nat.is_le, List.take(&2, Nat, xs, n))",
+      "sha256": "f2da9b2f49071b59ac8f7300bf34137cf2a5848197c6de8f25dcff2a22eb0423",
+      "since": null
     },
     "list.tail_map": {
       "kind": "law",

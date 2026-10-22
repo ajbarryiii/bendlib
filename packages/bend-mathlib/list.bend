@@ -898,6 +898,182 @@ def sorted_tail(x, xs, h):
       +x = x
       internal_sorted_tail_step(x, y, t, Nat.is_le(x, y), {==}, h)
 
+def internal_sorted_take_cons(t: List<&2, Nat>, n: Nat, +x: Nat, h: sorted_by(~Nat, ~Nat.is_le, x <> t)) -> sorted_by(~Nat, ~Nat.is_le, x <> List.take(&2, Nat, t, n)):
+  match t n:
+    case Nil{} _:
+      {==}
+    case y <> u 0n:
+      {==}
+    case +y <> u 1n+q:
+      +u = u
+      +h = h
+      sorted_cons_cons_intro(x, y, List.take(&2, Nat, u, q), sorted_cons_cons_elim_le(x, y, u, h), internal_sorted_take_cons(u, q, y, sorted_cons_cons_elim_tail(x, y, u, h)))
+
+# A prefix of a Nat list sorted by Nat.is_le is sorted.
+law sorted_take:
+  for xs: List<&2, Nat>
+  for n: Nat
+  for h: sorted_by(~Nat, ~Nat.is_le, xs)
+  sorted_by(~Nat, ~Nat.is_le, List.take(&2, Nat, xs, n))
+
+def sorted_take(xs, n, h):
+  match xs n:
+    case Nil{} _:
+      {==}
+    case x <> t 0n:
+      {==}
+    case x <> t 1n+p:
+      internal_sorted_take_cons(t, p, x, h)
+
+# A suffix of a Nat list sorted by Nat.is_le is sorted.
+law sorted_drop:
+  for xs: List<&2, Nat>
+  for n: Nat
+  for h: sorted_by(~Nat, ~Nat.is_le, xs)
+  sorted_by(~Nat, ~Nat.is_le, List.drop(&2, Nat, xs, n))
+
+def sorted_drop(xs, n, h):
+  match xs n:
+    case Nil{} _:
+      {==}
+    case x <> t 0n:
+      h
+    case x <> t 1n+p:
+      +t = t
+      sorted_drop(t, p, sorted_tail(x, t, h))
+
+def internal_sorted_skip(+x: Nat, +z: Nat, t: List<&2, Nat>, h: sorted_by(~Nat, ~Nat.is_le, x <> z <> t)) -> sorted_by(~Nat, ~Nat.is_le, x <> t):
+  match t:
+    case Nil{}:
+      {==}
+    case +w <> u:
+      +u = u
+      +h = h
+      sorted_cons_cons_intro(x, w, u, MNat.le_trans(x, z, w, sorted_cons_cons_elim_le(x, z, w <> u, h), sorted_cons_cons_elim_le(z, w, u, sorted_cons_cons_elim_tail(x, z, w <> u, h))), sorted_cons_cons_elim_tail(z, w, u, sorted_cons_cons_elim_tail(x, z, w <> u, h)))
+
+def internal_sorted_filter_cons_put(-x: Nat, -z: Nat, -r: List<&2, Nat>, b: Bool, hxz: MNat.le(x, z), hxr: sorted_by(~Nat, ~Nat.is_le, x <> r), hzr: sorted_by(~Nat, ~Nat.is_le, z <> r)) -> sorted_by(~Nat, ~Nat.is_le, x <> List.filter.put(Nat, z, r, b)):
+  match b:
+    case False{}:
+      hxr
+    case True{}:
+      sorted_cons_cons_intro(x, z, r, hxz, hzr)
+
+def internal_sorted_filter_cons(~f: Nat -> Bool, xs: List<&2, Nat>, +x: Nat, h: sorted_by(~Nat, ~Nat.is_le, x <> xs)) -> sorted_by(~Nat, ~Nat.is_le, x <> List.filter(~Nat, ~f, xs)):
+  match xs:
+    case Nil{}:
+      {==}
+    case +z <> t:
+      +t = t
+      +h = h
+      internal_sorted_filter_cons_put(x, z, List.filter(~Nat, ~f, t), f(z), sorted_cons_cons_elim_le(x, z, t, h), internal_sorted_filter_cons(~f, t, x, internal_sorted_skip(x, z, t, h)), internal_sorted_filter_cons(~f, t, z, sorted_cons_cons_elim_tail(x, z, t, h)))
+
+def internal_sorted_filter_put(-x: Nat, -r: List<&2, Nat>, b: Bool, hxr: sorted_by(~Nat, ~Nat.is_le, x <> r), hr: sorted_by(~Nat, ~Nat.is_le, r)) -> sorted_by(~Nat, ~Nat.is_le, List.filter.put(Nat, x, r, b)):
+  match b:
+    case False{}:
+      hr
+    case True{}:
+      hxr
+
+# Filtering a Nat list sorted by Nat.is_le keeps it sorted.
+law sorted_filter:
+  for ~f: Nat -> Bool
+  for xs: List<&2, Nat>
+  for h: sorted_by(~Nat, ~Nat.is_le, xs)
+  sorted_by(~Nat, ~Nat.is_le, List.filter(~Nat, ~f, xs))
+
+def sorted_filter(f, xs, h):
+  match xs:
+    case Nil{}:
+      {==}
+    case +x <> t:
+      +t = t
+      +h = h
+      internal_sorted_filter_put(x, List.filter(~Nat, ~f, t), f(x), internal_sorted_filter_cons(~f, t, x, h), sorted_filter(~f, t, sorted_tail(x, t, h)))
+
+def internal_head_le_mem_step(+x: Nat, +z: Nat, -t: List<&2, Nat>, +y: Nat, b: Bool, e: {Nat.is_eq(z, y) == b : Bool}, hxz: MNat.le(x, z), hm: {Bool.or(b, List.contains(~Nat, ~Nat.is_eq, t, y)) == True{} : Bool}, ih: {List.contains(~Nat, ~Nat.is_eq, t, y) == True{} : Bool} -> MNat.le(z, y)) -> MNat.le(x, y):
+  match b:
+    case True{}:
+      %MNat.eq_of_is_eq(z, y, e) : MNat.le(x, _)
+      hxz
+    case False{}:
+      MNat.le_trans(x, z, y, hxz, ih(hm))
+
+def internal_head_le_mem(xs: List<&2, Nat>, x: Nat, y: Nat, hs: sorted_by(~Nat, ~Nat.is_le, x <> xs), hm: mem(~Nat, ~Nat.is_eq, y, xs)) -> MNat.le(x, y):
+  match xs:
+    case Nil{}:
+      Empty.absurd(MNat.le(x, y), MNat.internal_false_ne_true(hm))
+    case +z <> t:
+      +x = x
+      +y = y
+      +t = t
+      +hs = hs
+      internal_head_le_mem_step(x, z, t, y, Nat.is_eq(z, y), {==}, sorted_cons_cons_elim_le(x, z, t, hs), Equal.trans(Bool, Bool.or(Nat.is_eq(z, y), List.contains(~Nat, ~Nat.is_eq, t, y)), List.contains(~Nat, ~Nat.is_eq, z <> t, y), True{}, internal_contains_cons(~Nat, ~Nat.is_eq, z, t, y), hm), k => internal_head_le_mem(t, z, y, sorted_cons_cons_elim_tail(x, z, t, hs), k))
+
+# The head of a Nat list sorted by Nat.is_le is <= every member of its tail.
+law sorted_head_le_mem:
+  for x: Nat
+  for xs: List<&2, Nat>
+  for y: Nat
+  for hs: sorted_by(~Nat, ~Nat.is_le, x <> xs)
+  for hm: mem(~Nat, ~Nat.is_eq, y, xs)
+  MNat.le(x, y)
+
+def sorted_head_le_mem(x, xs, y, hs, hm):
+  internal_head_le_mem(xs, x, y, hs, hm)
+
+def internal_le_of_mem_step(+x: Nat, xs: List<&2, Nat>, +y: Nat, b: Bool, e: {Nat.is_eq(x, y) == b : Bool}, hs: sorted_by(~Nat, ~Nat.is_le, x <> xs), hm: {Bool.or(b, List.contains(~Nat, ~Nat.is_eq, xs, y)) == True{} : Bool}) -> MNat.le(x, y):
+  match b:
+    case True{}:
+      %MNat.eq_of_is_eq(x, y, e) : MNat.le(x, _)
+      MNat.le_refl(x)
+    case False{}:
+      sorted_head_le_mem(x, xs, y, hs, hm)
+
+# The head of a Nat list sorted by Nat.is_le is <= every member of the list.
+law sorted_le_of_mem:
+  for x: Nat
+  for xs: List<&2, Nat>
+  for y: Nat
+  for hs: sorted_by(~Nat, ~Nat.is_le, x <> xs)
+  for hm: mem(~Nat, ~Nat.is_eq, y, x <> xs)
+  MNat.le(x, y)
+
+def sorted_le_of_mem(x, xs, y, hs, hm):
+  +x = x
+  +y = y
+  +xs = xs
+  internal_le_of_mem_step(x, xs, y, Nat.is_eq(x, y), {==}, hs, Equal.trans(Bool, Bool.or(Nat.is_eq(x, y), List.contains(~Nat, ~Nat.is_eq, xs, y)), List.contains(~Nat, ~Nat.is_eq, x <> xs, y), True{}, internal_contains_cons(~Nat, ~Nat.is_eq, x, xs, y), hm))
+
+def internal_sorted_append_cons(t: List<&2, Nat>, ys: List<&2, Nat>, +x: Nat, bnd: @a: Nat -> @b: Nat -> mem(~Nat, ~Nat.is_eq, a, x <> t) -> mem(~Nat, ~Nat.is_eq, b, ys) -> MNat.le(a, b), hx: sorted_by(~Nat, ~Nat.is_le, x <> t), hy: sorted_by(~Nat, ~Nat.is_le, ys)) -> sorted_by(~Nat, ~Nat.is_le, x <> List.append(&2, Nat, t, ys)):
+  match t:
+    case Nil{}:
+      match ys:
+        case Nil{}:
+          {==}
+        case +y <> u:
+          +u = u
+          sorted_cons_cons_intro(x, y, u, bnd(x, y, mem_cons_self(x, Nil{}), mem_cons_self(y, u)), hy)
+    case +z <> u:
+      +u = u
+      +hx = hx
+      sorted_cons_cons_intro(x, z, List.append(&2, Nat, u, ys), sorted_cons_cons_elim_le(x, z, u, hx), internal_sorted_append_cons(u, ys, z, +a => b => ma => mb => bnd(a, b, mem_cons_of_mem(a, x, z <> u, ma), mb), sorted_cons_cons_elim_tail(x, z, u, hx), hy))
+
+# Appending two Nat lists sorted by Nat.is_le, with every element of the first <= every element of the second, gives a sorted list.
+law sorted_append:
+  for xs: List<&2, Nat>
+  for ys: List<&2, Nat>
+  for bnd: @x: Nat -> @y: Nat -> mem(~Nat, ~Nat.is_eq, x, xs) -> mem(~Nat, ~Nat.is_eq, y, ys) -> MNat.le(x, y)
+  for hx: sorted_by(~Nat, ~Nat.is_le, xs)
+  for hy: sorted_by(~Nat, ~Nat.is_le, ys)
+  sorted_by(~Nat, ~Nat.is_le, List.append(&2, Nat, xs, ys))
+
+def sorted_append(xs, ys, bnd, hx, hy):
+  match xs:
+    case Nil{}:
+      hy
+    case x <> t:
+      internal_sorted_append_cons(t, ys, x, bnd, hx, hy)
+
 # Taking the length of the first part of an append gives the first part back.
 law take_left:
   for -a: Quant

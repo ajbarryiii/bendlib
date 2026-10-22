@@ -85,10 +85,10 @@ catalog functions.
 | `le_total_true` | `~le_total` | `~` |
 | `le_total_of_not_le` | `~le_total` (`le(a,b)=False` → `le(b,a)=True`) | `~` |
 
-## `order_open.bend` — `sorted_by` facts (statements only, proofs deferred)
+## `order_open.bend` — `sorted_by` facts (proved in `list.bend` since 0.7.5.0)
 
-Imports the **not-yet-frozen** predicates candidate `../predicates/list_preds.bend` (`mem`,
-`sorted_by`); these laws cannot ship before that freeze. All six are statements that need only
+Imports the predicates candidate `../predicates/list_preds.bend` (`mem`, `sorted_by`), since frozen
+in `packages/bend-mathlib/list.bend`, where all six laws are now proved. All six are statements that need only
 transitivity (plus, for `sorted_append`, a cross-bound hypothesis); lawcheck skips every one because
 it cannot generate `sorted_by` / `mem` values, so `0 ✗` is weak here.
 
@@ -130,7 +130,7 @@ Proposed F-fact line for the owner to record on close:
   `skipped`, not evidence. Only `algebra_instances.bend` (11 ✓) and `maybe_bind_pure` are decided.
 - `algebra_instances.bend` proves the *statements* by instantiating abstract theorems with the
   current package's lemmas; it does not re-verify the mathlib lemmas.
-- `order_open.bend` depends on the unfrozen `mem`/`sorted_by` candidate; those must freeze first.
+- `order_open.bend`'s six laws are proved in `list.bend` (0.7.5.0).
 - `op_comm3` deliberately needs only commutativity (no associativity); it is labelled that way.
 - `foldr_op_append`'s assoc + identity hypotheses are unused by its intended proof; it is recorded
   as the bead specified but is subsumed by `MList.foldr_append`.
