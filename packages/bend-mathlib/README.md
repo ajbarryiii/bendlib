@@ -5,12 +5,10 @@ Machine-checked lemmas for Bend 2, checked with `bend 2.0.38`.
 Rewriting: `%e : P` replaces the right side of `e` with its left side, so `name` expands the simple
 side into the compound one and `name_sym` simplifies the compound side.
 
-Rows marked `next` are proved in this repository but not yet published: the import lines above do not contain them yet.
-
 ## algebra
 
 ```python
-import bend-mathlib@0.7.4.0/algebra.bend as MAlgebra
+import bend-mathlib@0.7.5.0/algebra.bend as MAlgebra
 ```
 
 | lemma | statement | meaning | since |
@@ -55,7 +53,7 @@ import bend-mathlib@0.7.4.0/algebra.bend as MAlgebra
 ## bool
 
 ```python
-import bend-mathlib@0.7.4.0/bool.bend as MBool
+import bend-mathlib@0.7.5.0/bool.bend as MBool
 ```
 
 | lemma | statement | meaning | since |
@@ -133,7 +131,7 @@ import bend-mathlib@0.7.4.0/bool.bend as MBool
 ## equal
 
 ```python
-import bend-mathlib@0.7.4.0/equal.bend as MEqual
+import bend-mathlib@0.7.5.0/equal.bend as MEqual
 ```
 
 | lemma | statement | meaning | since |
@@ -146,7 +144,7 @@ import bend-mathlib@0.7.4.0/equal.bend as MEqual
 ## list
 
 ```python
-import bend-mathlib@0.7.4.0/list.bend as MList
+import bend-mathlib@0.7.5.0/list.bend as MList
 ```
 
 | predicate | definition | since |
@@ -206,12 +204,12 @@ import bend-mathlib@0.7.4.0/list.bend as MList
 | `sorted_cons_cons_elim_le(x, y, t, h)` | `∀ x: Nat, y: Nat, -t: List<&2, Nat>, h: sorted_by(~Nat, ~Nat.is_le, x <> y <> t). MNat.le(x, y)` | The first two elements of a Nat list sorted by Nat.is_le are in order. | 0.3.0.0 |
 | `sorted_cons_cons_elim_tail(x, y, t, h)` | `∀ x: Nat, y: Nat, -t: List<&2, Nat>, h: sorted_by(~Nat, ~Nat.is_le, x <> y <> t). sorted_by(~Nat, ~Nat.is_le, y <> t)` | The tail of a Nat list of two or more elements sorted by Nat.is_le is sorted. | 0.3.0.0 |
 | `sorted_tail(x, xs, h)` | `∀ x: Nat, xs: List<&2, Nat>, h: sorted_by(~Nat, ~Nat.is_le, x <> xs). sorted_by(~Nat, ~Nat.is_le, xs)` | The tail of a nonempty Nat list sorted by Nat.is_le is sorted. | 0.3.0.0 |
-| `sorted_take(xs, n, h)` | `∀ xs: List<&2, Nat>, n: Nat, h: sorted_by(~Nat, ~Nat.is_le, xs). sorted_by(~Nat, ~Nat.is_le, List.take(&2, Nat, xs, n))` | A prefix of a Nat list sorted by Nat.is_le is sorted. | next |
-| `sorted_drop(xs, n, h)` | `∀ xs: List<&2, Nat>, n: Nat, h: sorted_by(~Nat, ~Nat.is_le, xs). sorted_by(~Nat, ~Nat.is_le, List.drop(&2, Nat, xs, n))` | A suffix of a Nat list sorted by Nat.is_le is sorted. | next |
-| `sorted_filter(~f, xs, h)` | `∀ ~f: Nat -> Bool, xs: List<&2, Nat>, h: sorted_by(~Nat, ~Nat.is_le, xs). sorted_by(~Nat, ~Nat.is_le, List.filter(~Nat, ~f, xs))` | Filtering a Nat list sorted by Nat.is_le keeps it sorted. | next |
-| `sorted_head_le_mem(x, xs, y, hs, hm)` | `∀ x: Nat, xs: List<&2, Nat>, y: Nat, hs: sorted_by(~Nat, ~Nat.is_le, x <> xs), hm: mem(~Nat, ~Nat.is_eq, y, xs). MNat.le(x, y)` | The head of a Nat list sorted by Nat.is_le is <= every member of its tail. | next |
-| `sorted_le_of_mem(x, xs, y, hs, hm)` | `∀ x: Nat, xs: List<&2, Nat>, y: Nat, hs: sorted_by(~Nat, ~Nat.is_le, x <> xs), hm: mem(~Nat, ~Nat.is_eq, y, x <> xs). MNat.le(x, y)` | The head of a Nat list sorted by Nat.is_le is <= every member of the list. | next |
-| `sorted_append(xs, ys, bnd, hx, hy)` | `∀ xs: List<&2, Nat>, ys: List<&2, Nat>, bnd: @x: Nat -> @y: Nat -> mem(~Nat, ~Nat.is_eq, x, xs) -> mem(~Nat, ~Nat.is_eq, y, ys) -> MNat.le(x, y), hx: sorted_by(~Nat, ~Nat.is_le, xs), hy: sorted_by(~Nat, ~Nat.is_le, ys). sorted_by(~Nat, ~Nat.is_le, List.append(&2, Nat, xs, ys))` | Appending two Nat lists sorted by Nat.is_le, with every element of the first <= every element of the second, gives a sorted list. | next |
+| `sorted_take(xs, n, h)` | `∀ xs: List<&2, Nat>, n: Nat, h: sorted_by(~Nat, ~Nat.is_le, xs). sorted_by(~Nat, ~Nat.is_le, List.take(&2, Nat, xs, n))` | A prefix of a Nat list sorted by Nat.is_le is sorted. | 0.7.5.0 |
+| `sorted_drop(xs, n, h)` | `∀ xs: List<&2, Nat>, n: Nat, h: sorted_by(~Nat, ~Nat.is_le, xs). sorted_by(~Nat, ~Nat.is_le, List.drop(&2, Nat, xs, n))` | A suffix of a Nat list sorted by Nat.is_le is sorted. | 0.7.5.0 |
+| `sorted_filter(~f, xs, h)` | `∀ ~f: Nat -> Bool, xs: List<&2, Nat>, h: sorted_by(~Nat, ~Nat.is_le, xs). sorted_by(~Nat, ~Nat.is_le, List.filter(~Nat, ~f, xs))` | Filtering a Nat list sorted by Nat.is_le keeps it sorted. | 0.7.5.0 |
+| `sorted_head_le_mem(x, xs, y, hs, hm)` | `∀ x: Nat, xs: List<&2, Nat>, y: Nat, hs: sorted_by(~Nat, ~Nat.is_le, x <> xs), hm: mem(~Nat, ~Nat.is_eq, y, xs). MNat.le(x, y)` | The head of a Nat list sorted by Nat.is_le is <= every member of its tail. | 0.7.5.0 |
+| `sorted_le_of_mem(x, xs, y, hs, hm)` | `∀ x: Nat, xs: List<&2, Nat>, y: Nat, hs: sorted_by(~Nat, ~Nat.is_le, x <> xs), hm: mem(~Nat, ~Nat.is_eq, y, x <> xs). MNat.le(x, y)` | The head of a Nat list sorted by Nat.is_le is <= every member of the list. | 0.7.5.0 |
+| `sorted_append(xs, ys, bnd, hx, hy)` | `∀ xs: List<&2, Nat>, ys: List<&2, Nat>, bnd: @x: Nat -> @y: Nat -> mem(~Nat, ~Nat.is_eq, x, xs) -> mem(~Nat, ~Nat.is_eq, y, ys) -> MNat.le(x, y), hx: sorted_by(~Nat, ~Nat.is_le, xs), hy: sorted_by(~Nat, ~Nat.is_le, ys). sorted_by(~Nat, ~Nat.is_le, List.append(&2, Nat, xs, ys))` | Appending two Nat lists sorted by Nat.is_le, with every element of the first <= every element of the second, gives a sorted list. | 0.7.5.0 |
 | `take_left(a, A, xs, ys)` | `∀ -a: Quant, -A: Kind(a), xs: List<a, A>, ys: List<a, A>. {List.take(a, A, List.append(a, A, xs, ys), List.length(a, A, xs)) == xs : List<a, A>}` | Taking the length of the first part of an append gives the first part back. | 0.6.0.0 |
 | `drop_left(a, A, xs, ys)` | `∀ -a: Quant, -A: Kind(a), xs: List<a, A>, ys: List<a, A>. {List.drop(a, A, List.append(a, A, xs, ys), List.length(a, A, xs)) == ys : List<a, A>}` | Dropping the length of the first part of an append gives the second part. | 0.6.0.0 |
 | `take_append(a, A, xs, ys, n)` | `∀ -a: Quant, -A: Kind(a), xs: List<a, A>, -ys: List<a, A>, -n: Nat. {List.take(a, A, List.append(a, A, xs, ys), Nat.add(List.length(a, A, xs), n)) == List.append(a, A, xs, List.take(a, A, ys, n)) : List<a, A>}` | Taking past the first part of an append keeps it and takes the rest from the second part. | 0.6.0.0 |
@@ -368,7 +366,7 @@ import bend-mathlib@0.7.4.0/list.bend as MList
 ## maybe
 
 ```python
-import bend-mathlib@0.7.4.0/maybe.bend as MMaybe
+import bend-mathlib@0.7.5.0/maybe.bend as MMaybe
 ```
 
 | lemma | statement | meaning | since |
@@ -407,7 +405,7 @@ import bend-mathlib@0.7.4.0/maybe.bend as MMaybe
 ## nat
 
 ```python
-import bend-mathlib@0.7.4.0/nat.bend as MNat
+import bend-mathlib@0.7.5.0/nat.bend as MNat
 ```
 
 | predicate | definition | since |
@@ -769,7 +767,7 @@ import bend-mathlib@0.7.4.0/nat.bend as MNat
 ## order
 
 ```python
-import bend-mathlib@0.7.4.0/order.bend as MOrder
+import bend-mathlib@0.7.5.0/order.bend as MOrder
 ```
 
 | lemma | statement | meaning | since |
@@ -784,7 +782,7 @@ import bend-mathlib@0.7.4.0/order.bend as MOrder
 ## string
 
 ```python
-import bend-mathlib@0.7.4.0/string.bend as MString
+import bend-mathlib@0.7.5.0/string.bend as MString
 ```
 
 | lemma | statement | meaning | since |

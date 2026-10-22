@@ -170,7 +170,7 @@ their expected output, and what not to do. Read the whole bead before starting.
    bun tools/mathlib/lock.ts packages/bend-mathlib --check
    tag=$(git describe --tags --match 'bend-mathlib-v*' --abbrev=0 2>/dev/null || true)
    if [ -n "$tag" ]; then bun tools/mathlib/lock.ts packages/bend-mathlib --check --against "$tag"; else echo "no bend-mathlib-v* tag yet; skipping --against"; fi
-   bun tools/mathlib/index.ts packages/bend-mathlib bend-mathlib 0.7.4.0 --check   # version: latest row of RELEASES.md
+   bun tools/mathlib/index.ts packages/bend-mathlib bend-mathlib 0.7.5.0 --check   # version: latest row of RELEASES.md
    ```
 4. One commit per bead: `<area>: <what>` and a last line `Closes <id>`; run the full gate first.
    `br sync --flush-only`, `git add .beads/`, commit, then `git pull --rebase`, `git push`, and
