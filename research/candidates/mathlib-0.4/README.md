@@ -89,8 +89,9 @@ catalog functions.
 
 Imports the predicates candidate `../predicates/list_preds.bend` (`mem`, `sorted_by`), since frozen
 in `packages/bend-mathlib/list.bend`, where all six laws are now proved. All six are statements that need only
-transitivity (plus, for `sorted_append`, a cross-bound hypothesis); lawcheck skips every one because
-it cannot generate `sorted_by` / `mem` values, so `0 ✗` is weak here.
+transitivity (plus, for `sorted_append`, a cross-bound hypothesis). Against `list.bend`, lawcheck finds
+no counterexample to five of them (✓) and skips `sorted_append`, whose `bnd` hypothesis is a function it
+cannot generate.
 
 | law | statement | lawcheck |
 |---|---|---|
