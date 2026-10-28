@@ -430,7 +430,7 @@ describe("too-large instances and --max-nat", () => {
   // Only x = 3 hangs, so with --max-nat 3 the batch 0..3 times out and only its slow half stays undecided.
   test("timed-out instances get their own count on the law's line, are never passed, and fail only --strict", async () => {
     const file = u32Law([...PAR, "law par_true:", "  for x: Nat", "  {par(Bool.pick(Nat, Nat.is_eq(x, 3n), 40n, 0n)) == True{} : Bool}"]);
-    const args = [file, "--max-instances", "10", "--max-nat", "3", "--timeout", "3000", "--jobs", "4", "--allow-skip", "par_true"];
+    const args = [file, "--max-instances", "10", "--max-nat", "3", "--timeout", "3000", "--jobs", "4", "--allow-skip", "u32.par_true"];
     const r = await run(...args);
     expect(r.stderr).toBe("");
     expect(r.code).toBe(0);
@@ -693,16 +693,32 @@ describe("strict mode", () => {
     const strict = await run(file, "--strict", "--jobs", "4");
     expect(strict.code).toBe(1);
     expect(strict.stdout).toContain("~ vacuous");
-    const allowed = await run(file, "--strict", "--allow-skip", "vacuous", "--jobs", "4");
+    const allowed = await run(file, "--strict", "--allow-skip", "strict_skip.vacuous", "--jobs", "4");
     expect(allowed.code).toBe(0);
-    const wrong = await run(file, "--strict", "--allow-skip", "other,vacuous", "--jobs", "4");
+    const wrong = await run(file, "--strict", "--allow-skip", "strict_skip.other,strict_skip.vacuous", "--jobs", "4");
     expect(wrong.code).toBe(0);
-    const absent = await run(file, "--strict", "--allow-skip", "other", "--jobs", "4");
+    const absent = await run(file, "--strict", "--allow-skip", "strict_skip.other", "--jobs", "4");
     expect(absent.code).toBe(1);
   }, T);
 
+  test("an --allow-skip entry allows the skip only in its own module", async () => {
+    const file = path.join(FX, "strict_skip.bend");
+    const elsewhere = await run(file, "--strict", "--allow-skip", "other_module.vacuous", "--jobs", "4");
+    expect(elsewhere.code).toBe(1);
+    expect(elsewhere.stdout).toContain("~ vacuous");
+  }, T);
+
+  test("an unqualified --allow-skip entry is a usage error", async () => {
+    const file = path.join(FX, "strict_skip.bend");
+    for (const entry of ["vacuous", ".vacuous", "strict_skip.", "strict_skip.vacuous,vacuous"]) {
+      const r = await run(file, "--strict", "--allow-skip", entry);
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain("--allow-skip entries are <module>.<law>");
+    }
+  }, T);
+
   test("--allow-skip without --strict is accepted and changes nothing", async () => {
-    const r = await run(path.join(FX, "strict_skip.bend"), "--allow-skip", "vacuous", "--jobs", "4");
+    const r = await run(path.join(FX, "strict_skip.bend"), "--allow-skip", "strict_skip.vacuous", "--jobs", "4");
     expect(r.code).toBe(0);
   });
 });

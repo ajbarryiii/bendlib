@@ -4,11 +4,11 @@
 // checks the laws against every small mutant of the target's defs instead.
 // usage: bun tools/lawcheck/cli.ts <file.bend> [--impl <file>] [--size N] [--max-instances N]
 //          [--max-nat N] [--seed S] [--json] [--law name] [--jobs N] [--timeout MS] [--mem-mb MB]
-//          [--native] [--strict] [--allow-skip name,…]
+//          [--native] [--strict] [--allow-skip module.law,…]
 //        bun tools/lawcheck/cli.ts mutate <laws.bend> [--impl <file>] [--def <name>]
 //          [--json] [--max-instances N] [--seed S] [--size N] [--jobs N] [--timeout MS] [--mem-mb MB]
 //   --impl swaps a local import; --native adds engine N; --strict makes a skipped law fail
-//           the gate unless named in --allow-skip, and fails on any timed-out instance.
+//           the gate unless --allow-skip names it <module>.<law>, and fails on any timed-out instance.
 // exit: lawcheck 0 no counterexample · 1 counterexample (or, with --strict, a disallowed skip or a timeout) · 2 error
 //       mutate 0 no survivors · 1 survivor · 2 usage, load, tool error or error mutant
 
@@ -21,7 +21,7 @@ import {
   type LawResult, type MutateOptions, type MutateReport, type Options, type Report,
 } from "./src/lawcheck.ts";
 
-const USAGE = "usage: bun tools/lawcheck/cli.ts <file.bend> [--impl <file>] [--size N] [--max-instances N] [--max-nat N] [--seed S] [--json] [--law name] [--native] [--jobs N] [--timeout MS] [--mem-mb MB] [--strict] [--allow-skip name,…]";
+const USAGE = "usage: bun tools/lawcheck/cli.ts <file.bend> [--impl <file>] [--size N] [--max-instances N] [--max-nat N] [--seed S] [--json] [--law name] [--native] [--jobs N] [--timeout MS] [--mem-mb MB] [--strict] [--allow-skip module.law,…]";
 const MUTATE_USAGE = "usage: bun tools/lawcheck/cli.ts mutate <laws.bend> [--impl <file>] [--def <name>] [--json] [--max-instances N] [--seed S] [--size N] [--jobs N] [--timeout MS] [--mem-mb MB]";
 
 function die(msg: string, kind = "error"): never {
@@ -55,7 +55,11 @@ function parseArgs(argv: string[]) {
     else if (a === "--allow-skip") {
       const v = argv[++i];
       if (v === undefined) die(`${a} needs a comma-separated list\n${USAGE}`, "usage");
-      for (const nm of v.split(",")) if (nm.trim() !== "") o.allowSkip.add(nm.trim());
+      for (const nm of v.split(",").map((s) => s.trim()).filter((s) => s !== "")) {
+        const dot = nm.indexOf(".");
+        if (dot <= 0 || dot === nm.length - 1) die(`${a} entries are <module>.<law> (got ${nm})\n${USAGE}`, "usage");
+        o.allowSkip.add(nm);
+      }
     }
     else if (a === "--law" || a === "--impl") {
       const v = argv[++i];
@@ -195,7 +199,8 @@ async function runLawcheck(argv: string[]) {
   }
   console.log(o.json ? JSON.stringify(report, null, 2) : human(report));
   const has = (s: LawResult["status"]) => report.laws.some((l) => l.status === s);
-  const skipped = report.laws.filter((l) => l.status === "skip" && !o.allowSkip.has(l.name));
+  const mod = path.basename(o.file, ".bend");
+  const skipped = report.laws.filter((l) => l.status === "skip" && !o.allowSkip.has(`${mod}.${l.name}`));
   // --strict: a skipped law is a gap in the gate unless explicitly allowed, and a timed-out instance
   // always is: it may be the counterexample (README).
   const slow = o.strict ? report.laws.filter((l) => (l.timedOut ?? 0) > 0) : [];
