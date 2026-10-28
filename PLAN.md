@@ -1,7 +1,7 @@
 # bendlib — plan
 
-> **Date:** 2026-09-24 · **Owner:** Muhammed Durakovic · **Compiler:** `bend 2.0.38` since 2026-10-21
-> (linux-x64 archive sha256 `02089dc0eed0fd5fd6d73c74cc9cffcb2c6638dd3b02ae83f7b8cc57fbe381ba`; 2.0.35 before)
+> **Date:** 2026-09-24 · **Owner:** Muhammed Durakovic · **Compiler:** `bend 2.0.39` since 2026-10-28
+> (linux-x64 archive sha256 `6cf462fd8f70b094a4950ebb709a9c4ffd8f1d1189d9cedf1fd63cd5d041c7ab`; 2.0.38 before)
 > **Brand:** GitHub org `bendlib` · hub package `bend-mathlib` (D1: decided) · Apache-2.0
 >
 > Scope rule: this document holds architecture, design and build order. Process, publicity cadence

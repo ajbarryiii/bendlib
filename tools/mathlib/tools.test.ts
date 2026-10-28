@@ -875,6 +875,33 @@ test("packageFiles follows every local import form bend loads, and drops a BOM (
   expect(() => packageFiles(join(tmp, "far.bend"))).toThrow(/outside the entry directory/);
 });
 
+test("packageFiles refuses what bend 2.0.39 refuses to publish: a symlink out, a LICENSE linking out, a linked entry (planted negatives)", () => {
+  const away = mkdtempSync(join(tmpdir(), "bend-hash-out-"));
+  writeFileSync(join(away, "far.bend"), "import Base\n");
+  writeFileSync(join(away, "LICENSE"), "MIT\n");
+  writeFileSync(join(away, "main.bend"), "import Base\n");
+  const pkg = mkdtempSync(join(tmpdir(), "bend-hash-link-"));
+  writeFileSync(join(pkg, "all.bend"), "import Base\nimport ./far.bend as F\n");
+  symlinkSync(join(away, "far.bend"), join(pkg, "far.bend"));
+  expect(() => packageFiles(join(pkg, "all.bend"))).toThrow(/outside the entry directory/);
+
+  const lic = mkdtempSync(join(tmpdir(), "bend-hash-lic-"));
+  writeFileSync(join(lic, "all.bend"), "import Base\n");
+  symlinkSync(join(away, "LICENSE"), join(lic, "LICENSE"));
+  expect(() => packageFiles(join(lic, "all.bend"))).toThrow(/outside the entry directory/);
+
+  const ent = mkdtempSync(join(tmpdir(), "bend-hash-entry-"));
+  symlinkSync(join(away, "main.bend"), join(ent, "main.bend"));
+  expect(() => packageFiles(join(ent, "main.bend"))).toThrow(/in another directory/);
+
+  // a symlink that stays inside is read through and keyed by its target, as bend's loader keys it
+  const inside = mkdtempSync(join(tmpdir(), "bend-hash-inside-"));
+  writeFileSync(join(inside, "all.bend"), "import Base\nimport ./alias.bend as A\n");
+  writeFileSync(join(inside, "target.bend"), "import Base\n");
+  symlinkSync(join(inside, "target.bend"), join(inside, "alias.bend"));
+  expect(Object.keys(packageFiles(join(inside, "all.bend"))).sort()).toEqual(["all.bend", "target.bend"]);
+});
+
 test("hash: a missing, non-file or climbing entry is a typed usage error, exit 2, no stack", () => {
   const tmp = mkdtempSync(join(tmpdir(), "bend-hash-bad-"));
   const climb = join(tmp, "pkg", "sub", "main.bend");

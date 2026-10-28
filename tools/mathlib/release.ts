@@ -46,8 +46,9 @@ export function headerVersionError(pkg: string, name: string, version: string): 
 export function devlibError(bendLib: string | undefined): string | null {
   if (bendLib === undefined || bendLib === "") return null;
   const real = (p: string) => { try { return realpathSync(p); } catch { return resolve(p); } };
-  // Under such a BEND_LIB, `bend --publish` takes a hub import for a local file and bundles its package.
-  const refuse = (why: string) => `BEND_LIB=${bendLib} ${why}; a publish would bundle local packages. Run release.ts directly, not through devlib (its gates fetch hub imports themselves)`;
+  // Under such a BEND_LIB a hub import loads as a local file outside the entry's directory, which bend
+  // refuses to publish (2.0.39 main.ts:857-862; before 2.0.39 it bundled it), but only after every gate ran.
+  const refuse = (why: string) => `BEND_LIB=${bendLib} ${why}; a publish would take its hub imports for local files outside the package. Run release.ts directly, not through devlib (its gates fetch hub imports themselves)`;
   if (real(bendLib) === real(join(ROOT, ".devlib"))) return refuse("is the devlib directory");
   let entries;
   try { entries = readdirSync(bendLib, { withFileTypes: true }); } catch { return null; }

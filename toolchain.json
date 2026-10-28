@@ -1,19 +1,19 @@
 {
   "bend": {
-    "version": "2.0.38",
-    "release": "https://github.com/bendlang/bend/releases/tag/v2.0.38",
+    "version": "2.0.39",
+    "release": "https://github.com/bendlang/bend/releases/tag/v2.0.39",
     "archives": {
-      "linux-x64":    { "file": "bend-2.0.38-linux-x64.tar.gz",    "sha256": "f19d088b079c9e1a8834ecd153b7d58c11a5f8f9ab1bdb78dbc96a6bf49aaa81" },
-      "linux-arm64":  { "file": "bend-2.0.38-linux-arm64.tar.gz",  "sha256": "1f7c6e74a6ef7412cf08eee0e4d45fe5960f89d66fdaca2466f6a4856f0d400a" },
-      "darwin-arm64": { "file": "bend-2.0.38-darwin-arm64.tar.gz", "sha256": "9d5331d01e82dac40dd012953e78221f533f7df7ad7e16b07f1f7bd0dcd088dd" },
-      "darwin-x64":   { "file": "bend-2.0.38-darwin-x64.tar.gz",   "sha256": "870be3b91290e14259dba432788c71d7190d8984f8606255e5333c3a03896d5a" }
+      "linux-x64":    { "file": "bend-2.0.39-linux-x64.tar.gz",    "sha256": "6cf462fd8f70b094a4950ebb709a9c4ffd8f1d1189d9cedf1fd63cd5d041c7ab" },
+      "linux-arm64":  { "file": "bend-2.0.39-linux-arm64.tar.gz",  "sha256": "71b43e1bb9313dd14ac2b0553b854e41c39d65ecaa47040796ebff4a46f54a97" },
+      "darwin-arm64": { "file": "bend-2.0.39-darwin-arm64.tar.gz", "sha256": "d4aaef68de545727429ce83b9e88ff3273bf068df599e3542e446755b5f3d83a" },
+      "darwin-x64":   { "file": "bend-2.0.39-darwin-x64.tar.gz",   "sha256": "a512cfd1d29ec24c640126a6a640e597b4ea1abe0aefbda7cc57efd85ab56e22" }
     },
     "source": {
-      "commit": "0a57ca0d21de94a3724d8be21afb0eb89f88b4d8",
+      "commit": "a3efe8a3801f423827424227172eed9802c5e6cb",
       "files": {
         "bend2/bend.ts":  "22b5915cd7cccd23b6aa28849b23a7f1e3549333cdd0954ab48103ddd0777e9e",
-        "bend2/main.ts":  "04b071a69849e8347cc092f5f089c461985f4ef8b36d8ff8109cb30282e3b10d",
-        "bend2/base.bend": "2da042974826279cf216cbe009a201bf14a6875747d7f5caf43ccf200b066f26"
+        "bend2/main.ts":  "08fce099aa40693165891f143875ae40cf4b53d6a651673c54ab053e8207a49f",
+        "bend2/base.bend": "3cd0b0944b11e15c4da5c9af2560e3c04f27d3d37027f1617899aeec17b499ce"
       }
     }
   }
