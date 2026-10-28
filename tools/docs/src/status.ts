@@ -1,10 +1,10 @@
 // status: `bend <file> --check-only` per file on the pinned compiler, under a
 // timeout and an address-space cap, classified and cached by (hash, compiler).
 
-import { existsSync, readFileSync, readdirSync, writeFileSync, mkdirSync, renameSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
-import { CLEAN, stripCommentsAndStrings } from "../../mathlib/lib.ts";
+import { CLEAN, stripCommentsAndStrings, treeRssKb } from "../../mathlib/lib.ts";
 
 export const BEND = process.env.BEND_CLI ?? join(homedir(), ".bend", "bin", "bend");
 
@@ -135,10 +135,31 @@ export function sandboxProbe(bwrap = bwrapPath()): { ok: boolean; why: string } 
   return r;
 }
 
-/** The argv `checkFile` spawns: the pinned compiler under the memory cap, inside bwrap when sandboxed. */
-export function checkCommand(file: string, o: CheckOptions, sandbox: boolean): string[] {
-  const cap = Math.max(256, Math.floor(o.memMb)) * 1024;
-  const inner = ["bash", "-c", `ulimit -v ${cap}; exec "$0" "$1" --check-only`, BEND, file];
+const memCapProbes = new Map<string, boolean>();
+
+/** The address-space cap in KB that `checkCommand` sets with `ulimit -v`. */
+export const memCapKb = (o: CheckOptions) => Math.max(256, Math.floor(o.memMb)) * 1024;
+
+/** Probes that `bash` can set `ulimit -v capKb`; macOS refuses it, and its error would land in the checker output (issue #27). */
+export function memCapProbe(capKb: number, bash = Bun.which("bash", { PATH: process.env.PATH ?? "" }) ?? "bash"): boolean {
+  const key = `${bash} ${capKb}`;
+  const hit = memCapProbes.get(key);
+  if (hit !== undefined) return hit;
+  let ok: boolean;
+  try {
+    ok = Bun.spawnSync([bash, "-c", `ulimit -v ${capKb}`], { stdout: "ignore", stderr: "ignore" }).exitCode === 0;
+  } catch {
+    ok = false;
+  }
+  memCapProbes.set(key, ok);
+  return ok;
+}
+
+/** The argv `checkFile` spawns: the pinned compiler under the memory cap where it can be set, inside bwrap when sandboxed. */
+export function checkCommand(file: string, o: CheckOptions, sandbox: boolean, memCap: boolean): string[] {
+  const cap = memCapKb(o);
+  // without the cap only checkFile's resident-size watchdog bounds memory (/proc, or ps where there is none)
+  const inner = memCap ? ["bash", "-c", `ulimit -v ${cap}; exec "$0" "$1" --check-only`, BEND, file] : [BEND, file, "--check-only"];
   if (!sandbox) return inner;
   // `--dev /dev` is required: the Bun-compiled bend aborts when / is a read-only bind without a fresh /dev.
   // The lib binds read-only AFTER `--tmpfs /tmp`: a lib under /tmp stays visible, and untrusted code cannot rewrite cached sources.
@@ -148,7 +169,7 @@ export function checkCommand(file: string, o: CheckOptions, sandbox: boolean): s
 
 export async function checkFile(file: string, o: CheckOptions): Promise<FileStatus> {
   const t0 = performance.now();
-  const proc = Bun.spawn(checkCommand(file, o, sandboxProbe().ok), {
+  const proc = Bun.spawn(checkCommand(file, o, sandboxProbe().ok, memCapProbe(memCapKb(o))), {
     cwd: o.cwd,
     env: { ...process.env, BEND_LIB: o.bendLib, BEND_NO_TELEMETRY: "1" },
     stdout: "pipe", stderr: "pipe", stdin: "ignore",
@@ -166,18 +187,6 @@ export async function checkFile(file: string, o: CheckOptions): Promise<FileStat
   clearTimeout(timer);
   clearInterval(watch);
   return classify(`${so}${se}`, timedOut || overRss ? null : code, timedOut, (performance.now() - t0) / 1000, overRss ? o.rssMb : undefined);
-}
-
-/** Resident KB of a process and its descendants (Linux /proc; 0 where there is none). */
-export function treeRssKb(pid: number): number {
-  let kb = 0;
-  try {
-    kb += Number(readFileSync(`/proc/${pid}/status`, "utf8").match(/^VmRSS:\s+(\d+)/m)?.[1] ?? 0);
-    for (const t of readdirSync(`/proc/${pid}/task`)) {
-      for (const c of readFileSync(`/proc/${pid}/task/${t}/children`, "utf8").trim().split(/\s+/)) if (c !== "") kb += treeRssKb(Number(c));
-    }
-  } catch { /* exited, or no /proc */ }
-  return kb;
 }
 
 export function compilerVersion(): string {

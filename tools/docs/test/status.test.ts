@@ -5,7 +5,7 @@ import { describe, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { BEND, checkCommand, checkFile, classify, crossCheck, sandboxProbe, worst, type FileStatus } from "../src/status.ts";
+import { BEND, checkCommand, checkFile, classify, crossCheck, memCapKb, memCapProbe, sandboxProbe, worst, type FileStatus } from "../src/status.ts";
 import { sameVerdict, stale, DEFAULT_TIMEOUT } from "../build.ts";
 
 const CLEAN_OUT = "ALL PROOFS CHECK\nUse --verdict for mathematical validity.\n";
@@ -103,7 +103,7 @@ describe("crossCheck", () => {
 describe("checkCommand", () => {
   const o = { bendLib: "/lib", timeoutSec: 20, memMb: 4096, rssMb: 3072, cwd: "/pkg" };
   test("sandboxed: bwrap with a read-only root and read-only BEND_LIB, inner check unchanged", () => {
-    const argv = checkCommand("/lib/h/f.bend", o, true);
+    const argv = checkCommand("/lib/h/f.bend", o, true, true);
     expect(argv[0]).toBe("bwrap");
     expect(argv).toContain("--unshare-all");
     expect(argv).toContain("--die-with-parent");
@@ -117,14 +117,20 @@ describe("checkCommand", () => {
     expect(argv).not.toContain("--bind");
     const c = argv.indexOf("--chdir");
     expect(argv.slice(c, c + 2)).toEqual(["--chdir", "/pkg"]);
-    expect(argv.slice(argv.indexOf("bash"))).toEqual(checkCommand("/lib/h/f.bend", o, false));
+    expect(argv.slice(argv.indexOf("bash"))).toEqual(checkCommand("/lib/h/f.bend", o, false, true));
   });
   test("unsandboxed: today's argv, with the memory cap and no bwrap", () => {
-    const argv = checkCommand("/lib/h/f.bend", o, false);
+    const argv = checkCommand("/lib/h/f.bend", o, false, true);
     expect(argv[0]).toBe("bash");
     expect(argv).not.toContain("bwrap");
     expect(argv[2]).toContain("ulimit -v 4194304");
     expect(argv.slice(-2)).toEqual([BEND, "/lib/h/f.bend"]);
+  });
+  test("where the cap cannot be set, the checker runs directly, sandboxed or not", () => {
+    expect(checkCommand("/lib/h/f.bend", o, false, false)).toEqual([BEND, "/lib/h/f.bend", "--check-only"]);
+    const argv = checkCommand("/lib/h/f.bend", o, true, false);
+    expect(argv.slice(argv.indexOf(BEND))).toEqual([BEND, "/lib/h/f.bend", "--check-only"]);
+    expect(argv.join(" ")).not.toContain("ulimit");
   });
 });
 
@@ -244,6 +250,76 @@ describe("checkFile under the sandbox", () => {
     const lib = mkdtempSync(join(tmpdir(), "bend-docs-sandbox-"));
     const s = await checkFile(entry, { bendLib: lib, timeoutSec: 120, memMb: 16384, rssMb: 3072, cwd: dirname(entry) });
     expect(s.class).toBe("checks");
+  }, 180_000);
+});
+
+/** Writes a `bash` that refuses every `ulimit -v`, as macOS bash does (issue #27), and returns its path. */
+function darwinBash(): string {
+  return fakeBash(`[ "$1" = -v ]`);
+}
+
+/** Writes a `bash` whose `ulimit -v N` fails with macOS's message whenever `refuseIf` holds, and returns its path. */
+function fakeBash(refuseIf: string): string {
+  const dir = mkdtempSync(join(tmpdir(), "bend-docs-bash-"));
+  const real = Bun.which("bash")!;
+  const refuse = `ulimit() { if ${refuseIf}; then echo "bash: line 1: ulimit: virtual memory: cannot modify limit: Invalid argument" >&2; return 1; fi; builtin ulimit "$@"; }`;
+  writeFileSync(join(dir, "bash"), `#!${real}\n[ "$1" = -c ] || exit 99\nexec ${real} -c '${refuse}'$'\\n'"$2" "\${@:3}"\n`);
+  chmodSync(join(dir, "bash"), 0o755);
+  return join(dir, "bash");
+}
+
+/** Runs `f` unsandboxed with that `bash` first on PATH. */
+async function withDarwinBash<T>(f: () => Promise<T>): Promise<T> {
+  const dir = dirname(darwinBash());
+  const saved = { PATH: process.env.PATH, BEND_DOCS_BWRAP: process.env.BEND_DOCS_BWRAP };
+  process.env.PATH = `${dir}:${process.env.PATH}`;
+  process.env.BEND_DOCS_BWRAP = join(dir, "no-bwrap");
+  try {
+    return await f();
+  } finally {
+    for (const [k, v] of Object.entries(saved)) if (v === undefined) delete process.env[k]; else process.env[k] = v;
+  }
+}
+
+describe("a shell that cannot set the address-space cap (issue #27)", () => {
+  test("the probe sees the refusal; a shell that can set it passes", () => {
+    expect(memCapProbe(16384 * 1024, darwinBash())).toBe(false);
+    if (process.platform === "linux") expect(memCapProbe(16384 * 1024)).toBe(true);
+  });
+  test("the probe tries the cap the check sets: a hard limit below the cap fails it, above it passes", () => {
+    const hard = fakeBash(`[ "$1" = -v ] && [ "$2" -gt 2097152 ]`);
+    expect(memCapProbe(memCapKb({ bendLib: "/l", timeoutSec: 1, memMb: 16384, rssMb: 1, cwd: "/" }), hard)).toBe(false);
+    expect(memCapProbe(memCapKb({ bendLib: "/l", timeoutSec: 1, memMb: 1024, rssMb: 1, cwd: "/" }), hard)).toBe(true);
+  });
+  const opts = (entry: string) => ({ bendLib: mkdtempSync(join(tmpdir(), "bend-docs-nocap-")), timeoutSec: 120, memMb: 16384, rssMb: 3072, cwd: dirname(entry) });
+  test("a file the checker accepts still checks", async () => {
+    const entry = join(import.meta.dir, "..", "..", "mathlib", "fixtures", "good", "list.bend");
+    const s = await withDarwinBash(() => checkFile(entry, opts(entry)));
+    expect(s.class).toBe("checks");
+  }, 180_000);
+  test("planted negative: a file the checker rejects is still `fails`, with the checker's own error", async () => {
+    const entry = join(import.meta.dir, "..", "..", "..", "research", "experiments", "ctor.bend");
+    const s = await withDarwinBash(() => checkFile(entry, opts(entry)));
+    expect(s.class).toBe("fails");
+    expect(s.summary).toBe("- expected : a fresh constructor name (duplicate declaration: Some)");
+    expect(s.detail).not.toContain("ulimit");
+  }, 180_000);
+  test.skipIf(process.platform !== "linux")("the resident-memory limit still stops the uncapped checker", async () => {
+    const entry = join(import.meta.dir, "..", "..", "..", "packages", "bend-mathlib", "nat.bend");
+    const s = await withDarwinBash(() => checkFile(entry, { ...opts(entry), rssMb: 20 }));
+    expect(s.class).toBe("limit");
+  }, 180_000);
+  test("measured with ps, as where there is no /proc (macOS), the uncapped checker is still stopped at the resident limit", async () => {
+    const entry = join(import.meta.dir, "..", "..", "..", "packages", "bend-mathlib", "nat.bend");
+    const saved = process.env.BENDLIB_RSS;
+    process.env.BENDLIB_RSS = "ps";
+    try {
+      const s = await withDarwinBash(() => checkFile(entry, { ...opts(entry), rssMb: 20 }));
+      expect(s.class).toBe("limit");
+      expect(s.rssMb).toBe(20);
+    } finally {
+      if (saved === undefined) delete process.env.BENDLIB_RSS; else process.env.BENDLIB_RSS = saved;
+    }
   }, 180_000);
 });
 

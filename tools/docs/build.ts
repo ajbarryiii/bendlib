@@ -39,7 +39,7 @@ function usage(msg: string): never {
 }
 
 function parseArgs(argv: string[]): Args {
-  const a: Args = { limit: null, only: null, local: null, check: true, jobs: 8, timeout: DEFAULT_TIMEOUT, memMb: 16384, rssMb: 3072, out: join(HERE, "dist"), cache: join(HERE, ".cache"), requireSandbox: false };
+  const a: Args = { limit: null, only: null, local: null, check: true, jobs: 4, timeout: DEFAULT_TIMEOUT, memMb: 16384, rssMb: 3072, out: join(HERE, "dist"), cache: join(HERE, ".cache"), requireSandbox: false };
   let outSet = false;
   const num = (i: number) => {
     const n = Number(argv[i + 1]);
