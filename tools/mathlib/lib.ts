@@ -194,29 +194,36 @@ export const rssSource = (): "proc" | "ps" => (process.env.BENDLIB_RSS === "ps" 
 
 /** Resident KB of a process and its descendants; 0 once it has exited or when neither source can be read. */
 export function treeRssKb(pid: number, via = rssSource()): number {
-  return via === "proc" ? procTreeRssKb(pid) : psTreeRssKb(pid);
-}
-
-function procTreeRssKb(pid: number): number {
   let kb = 0;
-  try {
-    kb += Number(readFileSync(`/proc/${pid}/status`, "utf8").match(/^VmRSS:\s+(\d+)/m)?.[1] ?? 0);
-    for (const t of readdirSync(`/proc/${pid}/task`)) {
-      for (const c of readFileSync(`/proc/${pid}/task/${t}/children`, "utf8").trim().split(/\s+/)) if (c !== "") kb += procTreeRssKb(Number(c));
-    }
-  } catch { /* exited */ }
+  for (const k of processTree(pid, via).values()) kb += k;
   return kb;
 }
 
-// One `ps` call per watchdog tick: the whole tree is summed from a single snapshot of the table.
-function psTreeRssKb(pid: number): number {
+/** Pids of a process and its descendants, the process first; empty once it has exited or when neither source can be read. */
+export const treePids = (pid: number, via = rssSource()): number[] => [...processTree(pid, via).keys()];
+
+const processTree = (pid: number, via: "proc" | "ps"): Map<number, number> => (via === "proc" ? procTree(pid, new Map()) : psTree(pid));
+
+function procTree(pid: number, tree: Map<number, number>): Map<number, number> {
+  try {
+    tree.set(pid, Number(readFileSync(`/proc/${pid}/status`, "utf8").match(/^VmRSS:\s+(\d+)/m)?.[1] ?? 0));
+    for (const t of readdirSync(`/proc/${pid}/task`)) {
+      for (const c of readFileSync(`/proc/${pid}/task/${t}/children`, "utf8").trim().split(/\s+/)) if (c !== "") procTree(Number(c), tree);
+    }
+  } catch { /* exited */ }
+  return tree;
+}
+
+// One `ps` call per watchdog tick: the whole tree is read from a single snapshot of the table.
+function psTree(pid: number): Map<number, number> {
+  const tree = new Map<number, number>();
   let out: string;
   try {
     const p = Bun.spawnSync(["ps", "-A", "-o", "pid=,ppid=,rss="], { stdout: "pipe", stderr: "ignore" });
-    if (p.exitCode !== 0) return 0;
+    if (p.exitCode !== 0) return tree;
     out = p.stdout.toString();
   } catch {
-    return 0;
+    return tree;
   }
   const rss = new Map<number, number>(), kids = new Map<number, number[]>();
   for (const line of out.split("\n")) {
@@ -228,14 +235,12 @@ function psTreeRssKb(pid: number): number {
     if (sibs === undefined) kids.set(parent, [c]);
     else sibs.push(c);
   }
-  let kb = 0;
   const todo = rss.has(pid) ? [pid] : [];
-  for (const seen = new Set<number>(); todo.length > 0;) {
+  while (todo.length > 0) {
     const q = todo.pop()!;
-    if (seen.has(q)) continue;
-    seen.add(q);
-    kb += rss.get(q) ?? 0;
+    if (tree.has(q)) continue;
+    tree.set(q, rss.get(q) ?? 0);
     todo.push(...(kids.get(q) ?? []));
   }
-  return kb;
+  return tree;
 }

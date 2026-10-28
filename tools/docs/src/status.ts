@@ -1,5 +1,5 @@
-// status: `bend <file> --check-only` per file on the pinned compiler, under a
-// timeout and an address-space cap, classified and cached by (hash, compiler).
+// status: `bend <file> --check-only` per file on the pinned compiler, under a timeout and a
+// resident-size watchdog (plus an address-space cap where `memCapProbe` succeeds), classified and cached by (hash, compiler).
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync } from "node:fs";
 import { dirname, join } from "node:path";

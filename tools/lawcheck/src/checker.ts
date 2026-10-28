@@ -5,7 +5,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { treeRssKb } from "../../mathlib/lib.ts";
+import { treePids, treeRssKb } from "../../mathlib/lib.ts";
 
 export type Item = { id: string; claim: string; hole?: boolean };
 
@@ -75,8 +75,11 @@ export function runBounded(E: Engine, args: string[]): Promise<Run> {
     E.runs++;
     const p = Bun.spawn(args, { env: { ...process.env, BEND_NO_TELEMETRY: "1" }, stdout: "pipe", stderr: "pipe" });
     let timedOut = false, overMemory = false;
-    const timer = setTimeout(() => { timedOut = true; p.kill(); }, E.timeoutMs);
-    const watch = setInterval(() => { if (treeRssKb(p.pid) > E.memMb * 1024) { overMemory = true; p.kill(9); } }, 200);
+    // `--native` builds run the C compiler as bend's child, which would outlive a kill of bend alone.
+    // Without a readable process table the tree is empty, so bend is also killed directly.
+    const killTree = () => { for (const q of treePids(p.pid)) try { process.kill(q, "SIGKILL"); } catch { /* exited */ } p.kill(9); };
+    const timer = setTimeout(() => { timedOut = true; killTree(); }, E.timeoutMs);
+    const watch = setInterval(() => { if (treeRssKb(p.pid) > E.memMb * 1024) { overMemory = true; killTree(); } }, 200);
     const [o, e] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text()]);
     const code = await p.exited;
     clearTimeout(timer);
@@ -136,7 +139,7 @@ function unsafeVerdict(out: string): { count: number; defs: string[] } | null {
 // A huge unary Nat can overflow either the checker's own guard or the host JS
 // stack, depending on the term (F31).
 export const overflowed = (out: string) => /the machine stack overflowed|Maximum call stack size exceeded/.test(out);
-// When only timeouts split a batch it spends at most 11 timed-out runs and 6 timeouts of wall time.
+// When only timeouts split a batch it spends at most 11 timed-out runs; their wall time depends on free job slots.
 // Memory and overflow splits and reruns after a fail are not charged; the halving depth bounds them.
 export const TIMEOUT_BUDGET = 6;
 

@@ -13,7 +13,7 @@ import instead of re-proving, and tools that keep laws honest.
 |---|---|---|
 | [`bend-mathlib`](packages/bend-mathlib) | 488 published lemmas (+330 generated `_sym` twins) about `Nat`, `Bool`, `List`, `String`, `Maybe`, `U32`, `Word(n)`, equality — generic, proved, zero `@unsafe` | **0.8.0.0 on BendHub** |
 | [`@bendlib/reader`](tools/reader) | Reads Bend source with the official parser of your installed compiler version | working |
-| [`lawcheck`](tools/lawcheck) | Finds counterexamples to laws before you try to prove them, and shrinks them; mutation mode shows how well the laws pin each def | **0.3.2**, binaries for Linux and macOS |
+| [`lawcheck`](tools/lawcheck) | Finds counterexamples to laws before you try to prove them, and shrinks them; mutation mode shows how well the laws pin each def | **0.4.0**, binaries for Linux and macOS |
 | [Bend Docs](https://bendlib.github.io/bendlib/) | API docs, checker status and law-shape search for every BendHub package | **live**, rebuilt on a schedule (the footer shows the build time) |
 
 ## Use it

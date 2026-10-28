@@ -204,7 +204,8 @@ async function runLawcheck(argv: string[]) {
   // --strict: a skipped law is a gap in the gate unless explicitly allowed, and a timed-out instance
   // always is: it may be the counterexample (README).
   const slow = o.strict ? report.laws.filter((l) => (l.timedOut ?? 0) > 0) : [];
-  if (slow.length > 0 && !o.json) console.log(`strict: ${slow.map((l) => `${l.name} (${l.timedOut} timed out)`).join(", ")}: timed-out instances fail --strict; raise --timeout`);
+  // under --json the line goes to stderr, so stdout stays exactly the JSON document
+  if (slow.length > 0) (o.json ? console.error : console.log)(`strict: ${slow.map((l) => `${l.name} (${l.timedOut} timed out)`).join(", ")}: timed-out instances fail --strict; raise --timeout`);
   process.exit(has("fail") || (o.strict && (skipped.length > 0 || slow.length > 0)) ? 1 : has("error") ? 2 : 0);
 }
 

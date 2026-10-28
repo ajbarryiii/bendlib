@@ -442,6 +442,10 @@ describe("too-large instances and --max-nat", () => {
     expect(s.stderr).toBe("");
     expect(s.code).toBe(1);
     expect(s.stdout).toContain("strict: par_true (1 timed out): timed-out instances fail --strict; raise --timeout");
+    const j = await run(...args, "--strict", "--json");
+    expect(j.code).toBe(1);
+    expect(JSON.parse(j.stdout).laws[0].timedOut).toBe(1);
+    expect(j.stderr).toContain("strict: par_true (1 timed out): timed-out instances fail --strict; raise --timeout");
   }, T);
 
   test("when every instance is too large and no binder is a plain Nat, the reason does not suggest --max-nat", async () => {

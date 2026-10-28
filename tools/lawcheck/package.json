@@ -1,6 +1,6 @@
 {
   "name": "@bendlib/lawcheck",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "description": "Finds and shrinks counterexamples to Bend 2 laws by evaluating closed instances with the bend checker.",

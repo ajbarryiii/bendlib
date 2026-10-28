@@ -14,17 +14,17 @@ async function run(...args: string[]) {
 }
 
 describe("mutate CLI", () => {
-  test("--version prints lawcheck 0.3.2", async () => {
+  test("--version prints lawcheck 0.4.0", async () => {
     const r = await run("--version");
     expect(r.code).toBe(0);
-    expect(r.stdout.trim()).toBe("lawcheck 0.3.2");
+    expect(r.stdout.trim()).toBe("lawcheck 0.4.0");
   });
 
   test("weak laws: exit 1, header shape and a survivor line", async () => {
     const r = await run("mutate", path.join(FX, "mut_weak.bend"), "--max-instances", "5", "--jobs", "4");
     expect(r.code).toBe(1);
     expect(r.stderr).toBe("");
-    expect(r.stdout).toMatch(/^lawcheck mutate 0\.3\.2 · .+ \(impl lib_ok\.bend\) · bend .+ · ≤5 instances\/law$/m);
+    expect(r.stdout).toMatch(/^lawcheck mutate 0\.4\.0 · .+ \(impl lib_ok\.bend\) · bend .+ · ≤5 instances\/law$/m);
     expect(r.stdout).toMatch(/^size {2}\d+\/\d+ valid mutants killed · \d+ survived · \d+ invalid$/m);
     expect(r.stdout).toMatch(/^ +survived {2}\S+ {2}line \d+ {2}.+ → .+$/m);
     expect(r.stdout).toContain("survivor(s): your laws do not pin these changes.");
@@ -76,7 +76,7 @@ describe("mutate CLI", () => {
     const rep = JSON.parse(r.stdout);
     expect(rep.schema).toBe(1);
     expect(rep.tool).toBe("lawcheck-mutate");
-    expect(rep.version).toBe("0.3.2");
+    expect(rep.version).toBe("0.4.0");
     expect(rep.impl).toContain("lib_ok.bend");
     expect(rep.defs.map((d: any) => d.name)).toEqual(["app"]);
     expect(rep.defs[0].mutants.length).toBeGreaterThan(0);
