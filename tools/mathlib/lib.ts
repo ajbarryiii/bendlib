@@ -1,4 +1,4 @@
-// Shared helpers for the bend-mathlib tools (check, lint, twins, lock).
+// Shared helpers for the bend-mathlib tools (check, lint, twins, lock), and the few docs and lawcheck share.
 //
 // These tools parse only OUR package sources, which follow strict conventions
 // (PLAN.md §3.1): top-level items start at column 0, every law is a `law name:`
@@ -188,3 +188,54 @@ export async function baseNames(): Promise<Set<string>> {
 }
 
 export const GENERATED_MARK = "# --- generated: _sym twins (tools/mathlib/twins.ts), do not edit ---";
+
+/** How `treeRssKb` measures: /proc where it exists (Linux), else `ps` (macOS); `BENDLIB_RSS=ps` forces `ps` for tests. */
+export const rssSource = (): "proc" | "ps" => (process.env.BENDLIB_RSS === "ps" || !existsSync("/proc/self/status") ? "ps" : "proc");
+
+/** Resident KB of a process and its descendants; 0 once it has exited or when neither source can be read. */
+export function treeRssKb(pid: number, via = rssSource()): number {
+  return via === "proc" ? procTreeRssKb(pid) : psTreeRssKb(pid);
+}
+
+function procTreeRssKb(pid: number): number {
+  let kb = 0;
+  try {
+    kb += Number(readFileSync(`/proc/${pid}/status`, "utf8").match(/^VmRSS:\s+(\d+)/m)?.[1] ?? 0);
+    for (const t of readdirSync(`/proc/${pid}/task`)) {
+      for (const c of readFileSync(`/proc/${pid}/task/${t}/children`, "utf8").trim().split(/\s+/)) if (c !== "") kb += procTreeRssKb(Number(c));
+    }
+  } catch { /* exited */ }
+  return kb;
+}
+
+// One `ps` call per watchdog tick: the whole tree is summed from a single snapshot of the table.
+function psTreeRssKb(pid: number): number {
+  let out: string;
+  try {
+    const p = Bun.spawnSync(["ps", "-A", "-o", "pid=,ppid=,rss="], { stdout: "pipe", stderr: "ignore" });
+    if (p.exitCode !== 0) return 0;
+    out = p.stdout.toString();
+  } catch {
+    return 0;
+  }
+  const rss = new Map<number, number>(), kids = new Map<number, number[]>();
+  for (const line of out.split("\n")) {
+    const m = /^\s*(\d+)\s+(\d+)\s+(\d+)\s*$/.exec(line);
+    if (m === null) continue;
+    const [c, parent, kb] = [Number(m[1]), Number(m[2]), Number(m[3])];
+    rss.set(c, kb);
+    const sibs = kids.get(parent);
+    if (sibs === undefined) kids.set(parent, [c]);
+    else sibs.push(c);
+  }
+  let kb = 0;
+  const todo = rss.has(pid) ? [pid] : [];
+  for (const seen = new Set<number>(); todo.length > 0;) {
+    const q = todo.pop()!;
+    if (seen.has(q)) continue;
+    seen.add(q);
+    kb += rss.get(q) ?? 0;
+    todo.push(...(kids.get(q) ?? []));
+  }
+  return kb;
+}

@@ -64,6 +64,32 @@ describe("mutate runner", () => {
     expect(ms.some((m: any) => m.status === "invalid")).toBe(true);
   }, T);
 
+  // The literal mutant 0n -> 1n turns par(0n) into par(x), which takes 2^x steps: it is still True,
+  // but its larger instances outlast the timeout, so the mutant is unknown, never survived.
+  test("a mutant whose instances time out is unknown, never survived", async () => {
+    const dir = files({
+      "slow.bend": ["import Base", "", "def par(n: Nat) -> Bool:", "  match n:", "    case 0n:", "      True{}", "    case 1n++p:",
+        "      Bool.and(par(p), par(p))", "", "def f(x: Nat) -> Bool:", "  par(Nat.mul(x, 0n))", "", "law f_true:", "  for x: Nat", "  {f(x) == True{} : Bool}"],
+    });
+    const rep = await mutate(path.join(dir, "slow.bend"), { def: "f", jobs: 4, maxInstances: 40, seed: 1, size: 3, timeoutMs: 3000 });
+    const lit = def(rep, "f").mutants.find((m: any) => m.op === "literal" && m.after.includes("1n"));
+    expect(lit.status).toBe("unknown");
+    expect(lit.detail).toMatch(/timed out/);
+  }, T);
+
+  // The literal mutant 0n -> 1n turns g(x) = x^0 into x^x: is_eq(g(x), g(x)) is still True, but from
+  // about x = 8 its unary Nat outgrows --mem-mb, so those instances are dropped and the mutant is unknown.
+  test("a mutant that drops more instances as too large than the unmutated code is unknown, never survived", async () => {
+    const dir = files({
+      "big.bend": ["import Base", "", "def g(+x: Nat) -> Nat:", "  Nat.pow(x, Nat.mul(x, 0n))", "", "def f(+x: Nat) -> Bool:", "  Nat.is_eq(g(x), g(x))",
+        "", "law f_true:", "  for x: Nat", "  {f(x) == True{} : Bool}"],
+    });
+    const rep = await mutate(path.join(dir, "big.bend"), { def: "g", jobs: 4, maxInstances: 40, seed: 1, size: 3, memMb: 200 });
+    const lit = def(rep, "g").mutants.find((m: any) => m.op === "literal" && m.after.includes("Nat.mul(x, 1n)"));
+    expect(lit.status).toBe("unknown");
+    expect(lit.detail).toMatch(/^law f_true: \d+ more instances? too large than unmutated$/);
+  }, T);
+
   test("no law evaluated on the base is a usage error, never all-survivors", async () => {
     await expect(mutate(path.join(FX, "mut_allskip.bend"), { jobs: 4, maxInstances: 5 })).rejects.toThrow(/no law was evaluated on the unmutated code/);
     await expect(mutate(path.join(FX, "mut_nolaws.bend"), { jobs: 4, maxInstances: 5 })).rejects.toThrow(/no law was evaluated on the unmutated code/);

@@ -10,6 +10,7 @@ export type Val =
   | { v: "str"; s: string }
   | { v: "list"; items: Val[] }
   | { v: "pair"; a: Val; b: Val }
+  | { v: "word"; bits: boolean[] }
   | { v: "ctor"; ty: Ty; name: string; i: number; fields: Val[] };
 
 export type Ctor = { name: string; params: string[]; fields: Ty[] };
@@ -19,7 +20,7 @@ export class Unsupported extends Error {}
 
 const U32_MAX = 4294967295;
 const MAX_DOMAIN = 5000;
-const OPAQUE = new Set(["Array", "Map", "Set", "F32", "Word", "Word.Nil", "Word.Con", "IO", "IO.OP", "App", "Image", "Event", "Chan", "File", "Socket", "Window", "Audio", "Empty", "Sigma"]);
+const OPAQUE = new Set(["Array", "Map", "Set", "F32", "Word.Nil", "Word.Con", "IO", "IO.OP", "App", "Image", "Event", "Chan", "File", "Socket", "Window", "Audio", "Empty", "Sigma"]);
 
 export type Rng = () => number;
 
@@ -36,6 +37,41 @@ export function mulberry32(seed: number): Rng {
 
 const pick = <T>(r: Rng, xs: T[]): T => xs[Math.floor(r() * xs.length)];
 const int = (r: Rng, lo: number, hi: number) => lo + Math.floor(r() * (hi - lo + 1));
+
+// Widths for a Nat binder that a later `Word(n)` binder is indexed by. No 32: a claim building 2^32,
+// such as Nat.pow(2n, n), times the checker out instead of overflowing (F31). Word(32n) still gets 32.
+export const WORD_WIDTHS = [0, 1, 2, 3, 4, 5, 6, 8, 16];
+
+function wordWidth(ty: Ty): number {
+  const a = ty.t === "app" ? ty.args[0] : undefined;
+  const m = a?.t === "app" && a.args.length === 0 ? /^(\d+)n$/.exec(a.head) : null;
+  if (m === null) throw new Unsupported(`${showTy(ty)} (width is not a Nat literal or an earlier Nat binder)`);
+  return Number(m[1]);
+}
+
+// Words at popcount layers 0, w, 1, w-1, ... up to `d` from either end: every word once w <= 2d+1.
+function wordLayers(w: number, d: number): Val[] {
+  const out: Val[] = [];
+  const seen = new Set<number>();
+  const choose = (k: number, from: number, acc: number[]): void => {
+    if (out.length >= MAX_DOMAIN) return;
+    if (acc.length === k) { out.push({ v: "word", bits: range(w).map((i) => acc.includes(i)) }); return; }
+    for (let i = from; i <= w - (k - acc.length); i++) choose(k, i + 1, [...acc, i]);
+  };
+  for (let k = 0; k <= d; k++) {
+    for (const c of [k, w - k]) if (c >= 0 && !seen.has(c)) { seen.add(c); choose(c, 0, []); }
+  }
+  return out;
+}
+
+// U32.to_nat of a U32 is a unary Nat, so a value past about 2^17 can only be dropped as too large
+// (F31): most draws stay as small as random Nats, a few reach 2^16, and 1 in 20 sets the top bit.
+function randomU32(r: Rng, small: number, max: number): number {
+  const x = r();
+  if (x < 0.8) return int(r, 0, r() < 0.5 ? small : max);
+  if (x < 0.95) return pick(r, [255, 256, 1023, 1024, 65535, 65536]);
+  return pick(r, [2147483648, U32_MAX - 1, U32_MAX, 2147483648 + Math.floor(r() * 2 ** 31)]);
+}
 
 export class Universe {
   constructor(private adts: Map<string, Adt>, private maxNat = 30) {}
@@ -61,6 +97,7 @@ export class Universe {
     const b = builtin(ty);
     if (b === "list") return this.check(ty.t === "app" ? ty.args[1] : ty, seen);
     if (b === "pair" && ty.t === "app") { this.check(ty.args[0], seen); this.check(ty.args[1], seen); return; }
+    if (b === "word") { wordWidth(ty); return; }
     if (b !== null) return;
     for (const c of this.adt(ty).ctors) for (const f of c.fields) this.check(f, seen);
   }
@@ -70,7 +107,9 @@ export class Universe {
     const cap = (xs: Val[]) => xs.slice(0, MAX_DOMAIN);
     switch (b) {
       case "nat": return range(d + 1).map((n) => ({ v: "nat", n }));
-      case "u32": return (d === 0 ? [0] : d === 1 ? [0, 1] : [0, 1, 2, U32_MAX]).map((n) => ({ v: "u32", n }));
+      // 4294967295 enters only at depth 3; a claim that applies U32.to_nat to it builds a unary 2^32-1
+      // and drops it as too large, so U32 wrap-around is exercised through Word(n) laws at small widths
+      case "u32": return (d === 0 ? [0] : d === 1 ? [0, 1] : d === 2 ? [0, 1, 2, 3] : [0, 1, 2, 3, U32_MAX]).map((n) => ({ v: "u32", n }));
       case "char": return (d === 0 ? ["a"] : ["a", "b"]).map((c) => ({ v: "char", c }));
       case "str": return ["", "a", "ab"].slice(0, d + 1).map((s) => ({ v: "str", s }));
       case "list": {
@@ -91,6 +130,7 @@ export class Universe {
         for (const a of this.enumerate(A, d)) for (const bb of this.enumerate(B, d)) out.push({ v: "pair", a, b: bb });
         return cap(out);
       }
+      case "word": return wordLayers(wordWidth(ty), d);
     }
     const { ctors } = this.adt(ty);
     const out: Val[] = [];
@@ -113,12 +153,19 @@ export class Universe {
       // Half the draws stay small so shrinking is cheap and small counterexamples surface; the
       // other half reaches the full `--max-nat` bound (README, PLAN F31).
       case "nat": return { v: "nat", n: int(r, 0, r() < 0.5 ? Math.min(this.maxNat, 3 * size) : this.maxNat) };
-      case "u32": return { v: "u32", n: r() < 0.5 ? pick(r, [0, 1, 2, 3, 255, 256, 65535, 2147483648, U32_MAX]) : Math.floor(r() * 2 ** 32) };
+      case "u32": return { v: "u32", n: randomU32(r, Math.min(this.maxNat, 3 * size), this.maxNat) };
       case "char": return { v: "char", c: pick(r, ["a", "b", "c", "d", "e"]) };
       case "str": return { v: "str", s: range(int(r, 0, size)).map(() => pick(r, ["a", "b", "c"])).join("") };
       // out of budget a list is empty, so a type that recurses only through a list (a rose tree) ends
       case "list": return { v: "list", items: range(budget <= 0 ? 0 : int(r, 0, Math.max(size + 2, 8))).map(() => this.random((ty as any).args[1], size, r, budget - 1)) };
       case "pair": return { v: "pair", a: this.random((ty as any).args[0], size, r, budget), b: this.random((ty as any).args[1], size, r, budget) };
+      case "word": {
+        const w = wordWidth(ty);
+        if (r() < 0.4) return { v: "word", bits: range(w).map(() => r() < 0.5) };
+        const i = int(r, 0, Math.max(0, w - 1)), k = int(r, 0, w);
+        const edges: ((j: number) => boolean)[] = [() => false, () => true, (j) => j === i, (j) => j !== i, (j) => j === w - 1, (j) => j < k, (j) => j >= k];
+        return { v: "word", bits: range(w).map(pick(r, edges)) };
+      }
     }
     const { adt, ctors } = this.adt(ty);
     const names = (t: Ty): boolean => t.t === "app" && (t.head === adt.name || t.args.some(names));
@@ -131,6 +178,28 @@ export class Universe {
     }
     const c = pick(r, choices);
     return { v: "ctor", ty, name: c.name, i: ctors.indexOf(c), fields: c.fields.map((f) => this.random(f, size, r, budget - 1)) };
+  }
+
+  /** A random Nat for a binder that indexes a `Word(n)`. */
+  randomWidth(r: Rng): Val {
+    return { v: "nat", n: pick(r, WORD_WIDTHS) };
+  }
+
+  /** `x` adjusted to `ty` after a shrink changed the width of a `Word(n)` inside it. */
+  fit(ty: Ty, x: Val): Val {
+    switch (x.v) {
+      case "word": {
+        const w = wordWidth(ty);
+        return { v: "word", bits: range(w).map((i) => x.bits[i] ?? false) };
+      }
+      case "list": return { v: "list", items: x.items.map((y) => this.fit((ty as any).args[1], y)) };
+      case "pair": return { v: "pair", a: this.fit((ty as any).args[0], x.a), b: this.fit((ty as any).args[1], x.b) };
+      case "ctor": {
+        const c = this.adt(ty).ctors[x.i];
+        return { ...x, ty, fields: x.fields.map((f, i) => this.fit(c.fields[i], f)) };
+      }
+      default: return x;
+    }
   }
 
   /** Candidates strictly smaller than `x`, most aggressive first. */
@@ -165,6 +234,14 @@ export class Universe {
         for (const a of this.shrink(x.a)) out.push({ ...x, a });
         for (const b of this.shrink(x.b)) out.push({ ...x, b });
         break;
+      case "word":
+        if (x.bits.some((b) => b)) out.push({ v: "word", bits: x.bits.map(() => false) });
+        x.bits.forEach((b, i) => {
+          if (!b) return;
+          out.push({ v: "word", bits: x.bits.map((c, j) => (j === i ? false : c)) });
+          if (i > 0 && !x.bits[i - 1]) out.push({ v: "word", bits: x.bits.map((c, j) => (j === i ? false : j === i - 1 ? true : c)) });
+        });
+        break;
       case "ctor": {
         const { ctors } = this.adt(x.ty);
         const key = showTy(x.ty);
@@ -178,7 +255,7 @@ export class Universe {
   }
 }
 
-function builtin(ty: Ty): "nat" | "u32" | "char" | "str" | "list" | "pair" | null {
+function builtin(ty: Ty): "nat" | "u32" | "char" | "str" | "list" | "pair" | "word" | null {
   if (ty.t !== "app") return null;
   if (ty.args.length === 0) {
     if (ty.head === "Nat") return "nat";
@@ -188,6 +265,8 @@ function builtin(ty: Ty): "nat" | "u32" | "char" | "str" | "list" | "pair" | nul
   }
   if (ty.head === "List" && ty.args.length === 2) return "list";
   if (ty.head === "Pair" && ty.args.length === 2) return "pair";
+  // `Word(n)` is a def that computes Word.Nil or Word.Con<p> from n, not an ADT
+  if (ty.head === "Word" && ty.args.length === 1) return "word";
   return null;
 }
 
@@ -201,6 +280,7 @@ export function measure(x: Val): number {
     case "str": return x.s.length * 2 + [...x.s].filter((c) => c !== "a").length;
     case "list": return x.items.reduce((s, y) => s + 1 + measure(y), 0);
     case "pair": return measure(x.a) + measure(x.b);
+    case "word": return x.bits.reduce((s, b, i) => s + (b ? 1 + i / 1000 : 0), 0);
     case "ctor": return x.i / 1000 + x.fields.reduce((s, y) => s + 1 + measure(y), 0);
   }
 }
@@ -214,6 +294,7 @@ export function render(x: Val, name: (n: string) => string = (n) => n): string {
     case "str": return JSON.stringify(x.s);
     case "list": return `[${x.items.map((y) => render(y, name)).join(", ")}]`;
     case "pair": return `(${render(x.a, name)}, ${render(x.b, name)})`;
+    case "word": return x.bits.reduceRight((t, b) => `${name("WCon")}{${name(b ? "True" : "False")}{}, ${t}}`, `${name("WNil")}{}`);
     case "ctor": return `${name(x.name)}{${x.fields.map((y) => render(y, name)).join(", ")}}`;
   }
 }

@@ -6,7 +6,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { BendReadError, decls, load, printedName, show, type Decl, type Loaded } from "../../reader/index.ts";
 import { stripCommentsAndStrings } from "../../mathlib/lib.ts";
-import { bendBin, cleanCheck, evaluate, evaluateAll, locate, ModuleError, overflowed, runBatch, slot, type Engine, type Item, type Outcome } from "./checker.ts";
+import { bendBin, cleanCheck, DEFAULT_MEM_MB, defaultJobs, evaluate, evaluateAll, locate, ModuleError, overflowed, runBatch, runBounded, type Engine, type Item, type Outcome } from "./checker.ts";
 import { defSpan, mutants } from "./mutate.ts";
 import { mentions, rewrite, Shadowed, showTerm, splitEquation, type TermDecl } from "./terms.ts";
 import { parseTy, showTy, substTy, type Ty } from "./types.ts";
@@ -20,6 +20,7 @@ export type Options = {
   impl?: string;
   jobs?: number;
   timeoutMs?: number;
+  memMb?: number;
   tmpDir?: string;
   maxNat?: number;
   shrink?: boolean;
@@ -60,9 +61,13 @@ export type LawResult = {
   claim: "equation" | "predicate" | "refutation" | "witness" | "other";
   status: "pass" | "fail" | "skip" | "error";
   reason?: string;
+  /** Instances whose claim was evaluated; with `tooLarge`, `timedOut` and `premiseFalse` they add up to `generated`. */
   instances: number;
   failures: number;
+  generated?: number;
   tooLarge?: number;
+  timedOut?: number;
+  premiseFalse?: number;
   native?: { checked: number; disagreements: NativeDisagreement[]; skip?: string };
   premise?: { satisfied: number; total: number };
   counterexample?: Counterexample;
@@ -245,7 +250,7 @@ function plan(L: Loaded, d: Decl, predicates: Map<string, PredStmt | null>, U: U
     else if (tmpl) throw new Skip(`template binder ~${b.name}: ${t}`);
     else {
       const ty = parseTy(t);
-      if (ty !== null && generable(U, substTy(ty, envTypes(p, TYPE_CHOICES[0])))) p.values.push({ name: b.name, ty });
+      if (ty !== null && generable(U, substTy(substTy(ty, envTypes(p, TYPE_CHOICES[0])), indexEnv(p, p.values.length)))) p.values.push({ name: b.name, ty });
       else if (isPredicateApp(t)) { p.premises.push(t); p.premiseSigs.push(sigOf(t)); premiseNames.push(b.name); }
       else if (ty === null) throw new Skip(`binder ${b.name}: cannot generate values of ${t}`);
       else p.values.push({ name: b.name, ty });
@@ -283,11 +288,10 @@ function plan(L: Loaded, d: Decl, predicates: Map<string, PredStmt | null>, U: U
   for (const n of premiseNames) {
     if (n !== "_" && [p.claim, ...p.premises].some((s) => mentions(s, n))) throw new Skip(`the claim uses the premise proof ${n}`);
   }
-  for (const v of p.values) {
+  for (const [i, v] of p.values.entries()) {
     for (const choice of p.typeParams.length ? TYPE_CHOICES : [""]) {
-      const env = envTypes(p, choice);
       try {
-        U.check(substTy(v.ty, env));
+        U.check(binderTy(p, i, choice));
       } catch (e) {
         if (e instanceof Unsupported) throw new Skip(`binder ${v.name}: no generator for type ${e.message}`);
         throw e;
@@ -303,7 +307,7 @@ function plan(L: Loaded, d: Decl, predicates: Map<string, PredStmt | null>, U: U
   for (const e of p.exs) {
     for (const choice of p.typeParams.length ? TYPE_CHOICES : [""]) {
       try {
-        U.check(substTy(e.ty, envTypes(p, choice)));
+        U.check(substTy(substTy(e.ty, envTypes(p, choice)), indexEnv(p, p.values.length)));
       } catch (err) {
         if (err instanceof Unsupported) throw new Skip(`\`exs\` witness ${e.name}: no generator for type ${err.message}`);
         throw err;
@@ -487,6 +491,29 @@ function envTypes(p: Plan, choice: string): Map<string, Ty> {
   return env;
 }
 
+const isNatTy = (t: Ty) => t.t === "app" && t.head === "Nat" && t.args.length === 0;
+const tyMentions = (t: Ty, name: string): boolean => t.t === "app" && ((t.head === name && t.args.length === 0) || t.args.some((a) => tyMentions(a, name)));
+
+// Earlier Nat binders as the literals they hold in `vals` (1n at plan time), so `Word(n)` has a width.
+function indexEnv(p: Plan, i: number, vals?: Val[]): Map<string, Ty> {
+  const env = new Map<string, Ty>();
+  for (let j = 0; j < i; j++) {
+    const x = vals?.[j];
+    if (isNatTy(p.values[j].ty)) env.set(p.values[j].name, { t: "app", head: `${x?.v === "nat" ? x.n : 1}n`, args: [], paren: false });
+  }
+  return env;
+}
+
+/** Value binder `i`'s concrete type: type parameters set to `choice`, Word widths taken from `vals`. */
+function binderTy(p: Plan, i: number, choice: string, vals?: Val[]): Ty {
+  return substTy(substTy(p.values[i].ty, envTypes(p, choice)), indexEnv(p, i, vals));
+}
+
+/** Which value binders have a type indexed by an earlier Nat binder (`for n: Nat` `for w: Word(n)`). */
+function dependents(p: Plan): boolean[] {
+  return p.values.map((v, i) => p.values.slice(0, i).some((u) => isNatTy(u.ty) && tyMentions(v.ty, u.name)));
+}
+
 function* product(doms: Val[][], order: number[]): Generator<Val[]> {
   for (const idx of order) {
     let k = idx;
@@ -546,6 +573,17 @@ function coverageOrder(combos: string[][], r: Rng): string[][] {
   return out;
 }
 
+/** The skip reason when no instance could be evaluated; it names only causes that hold for every law. */
+function noneEvaluated(p: Plan, tooLarge: number, timedOut: number, timeoutMs: number): string {
+  // --max-nat bounds only plain Nat binders, not a Word width or a U32
+  const natBinder = p.values.some((v, i) => isNatTy(v.ty) && !p.values.some((w, j) => j > i && tyMentions(w.ty, v.name)));
+  const large = `the claim or its premises build unary Nats too large for the checker${natBinder ? "; lower --max-nat" : ""}`;
+  const slow = `no checker run finished within --timeout ${timeoutMs} ms`;
+  if (timedOut === 0) return `every instance was too large to evaluate (${large})`;
+  if (tooLarge === 0) return `every instance timed out (${slow})`;
+  return `no instance could be evaluated: ${tooLarge} too large (${large}), ${timedOut} timed out (${slow})`;
+}
+
 function instances(p: Plan, U: Universe, o: Options, r: Rng): Inst[] {
   const choices = p.typeParams.length ? TYPE_CHOICES : [""];
   const perChoice = choices.map((choice) => catalogCombos(p.funs.map((f) => CATALOG[substSig(f, choice, p.typeParams)]), r));
@@ -560,6 +598,7 @@ function instances(p: Plan, U: Universe, o: Options, r: Rng): Inst[] {
     }
   }
   const all: Inst[] = [];
+  const dep = dependents(p);
   ctxs.forEach((ctx, ci) => {
     const budget = Math.floor(o.maxInstances / ctxs.length) + (ci < o.maxInstances % ctxs.length ? 1 : 0);
     const env = envTypes(p, ctx.choice);
@@ -574,6 +613,11 @@ function instances(p: Plan, U: Universe, o: Options, r: Rng): Inst[] {
       out.push({ vals, types, funs: ctx.funs });
     };
     const exhaustive = Math.ceil(budget * 0.6);
+    if (dep.some((x) => x)) {
+      dependentInstances(p, U, o, r, ctx.choice, { exhaustive, budget, add, count: () => out.length });
+      all.push(...out);
+      return;
+    }
     for (let d = 0; d <= o.size && out.length < exhaustive; d++) {
       const doms = tys.map((t) => U.enumerate(t, d));
       const total = doms.reduce((n, x) => n * x.length, 1);
@@ -590,6 +634,43 @@ function instances(p: Plan, U: Universe, o: Options, r: Rng): Inst[] {
     all.push(...out);
   });
   return all;
+}
+
+type Sink = { exhaustive: number; budget: number; add: (vals: Val[]) => void; count: () => number };
+
+// Like the product in `instances`, but each binder's domain is drawn after the Nat binders its
+// type is indexed by, and random index binders take WORD_WIDTHS.
+function dependentInstances(p: Plan, U: Universe, o: Options, r: Rng, choice: string, s: Sink): void {
+  const n = p.values.length;
+  const index = p.values.map((v, j) => isNatTy(v.ty) && p.values.some((w, i) => i > j && tyMentions(w.ty, v.name)));
+  for (let d = 0; d <= o.size && s.count() < s.exhaustive; d++) {
+    const memo = new Map<string, Val[]>();
+    const dom = (i: number, vals: Val[]) => {
+      const t = binderTy(p, i, choice, vals);
+      const k = showTy(t);
+      if (!memo.has(k)) memo.set(k, U.enumerate(t, d));
+      return memo.get(k)!;
+    };
+    const room = s.exhaustive - s.count();
+    let combos: Val[][] = [[]];
+    for (let i = 0; i < n && combos.length <= room; i++) combos = combos.flatMap((c) => dom(i, c).map((v) => [...c, v]));
+    if (combos.length === 0) continue;
+    if (combos.length <= room && combos[0].length === n) { for (const c of combos) s.add(c); continue; }
+    for (let t = 0; t < room * 4; t++) {
+      const vals: Val[] = [];
+      for (let i = 0; i < n; i++) {
+        const xs = dom(i, vals);
+        if (xs.length === 0) break;
+        vals.push(xs[Math.floor(r() * xs.length)]);
+      }
+      if (vals.length === n) s.add(vals);
+    }
+  }
+  for (let tries = 0; s.count() < s.budget && tries < s.budget * 20; tries++) {
+    const vals: Val[] = [];
+    for (let i = 0; i < n; i++) vals.push(index[i] ? U.randomWidth(r) : U.random(binderTy(p, i, choice, vals), Math.max(o.size, 3), r));
+    s.add(vals);
+  }
 }
 
 // bend >= 2.0.28 imports only paths of plain names (`[A-Za-z_][\w-]*` components; PLAN F3), so a
@@ -921,20 +1002,13 @@ async function runNative(E: Engine, src: string): Promise<string[] | string> {
   const file = path.join(dir, `h${n}.bend`);
   const bin = path.join(dir, `h${n}`);
   fs.writeFileSync(file, src);
-  const run = (args: string[]): Promise<{ out: string; code: number | null; timedOut: boolean }> => slot(E.jobs, async () => {
-    const p = Bun.spawn(args, { env: { ...process.env, BEND_NO_TELEMETRY: "1" }, stdout: "pipe", stderr: "pipe" });
-    let timedOut = false;
-    const timer = setTimeout(() => { timedOut = true; p.kill(); }, E.timeoutMs);
-    const [o, e] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text()]);
-    const code = await p.exited;
-    clearTimeout(timer);
-    return { out: o + e, code, timedOut };
-  });
-  const b = await run([E.bend, file, "-o", bin]);
+  const b = await runBounded(E, [E.bend, file, "-o", bin]);
   if (b.timedOut) return `native build timed out after ${E.timeoutMs} ms`;
+  if (b.overMemory) return `native build exceeded ${E.memMb} MB`;
   if (b.code !== 0) return `native build failed: ${E.display(b.out.trim())}`;
-  const r = await run([bin]);
+  const r = await runBounded(E, [bin]);
   if (r.timedOut) return `native run timed out after ${E.timeoutMs} ms`;
+  if (r.overMemory) return `native run exceeded ${E.memMb} MB`;
   if (r.code !== 0) return `native run failed: ${E.display(r.out.trim())}`;
   return r.out.split("\n").map((l) => l.trim()).filter((l) => l !== "");
 }
@@ -968,7 +1042,7 @@ export async function lawcheck(file: string, o: Options): Promise<Report> {
     const alias = nameOut(name);
     if (alias !== name) termDecls.set(alias, info);
   }
-  const E: Engine = { header, dir: tmp, bend: bendBin(), timeoutMs: o.timeoutMs ?? 120000, jobs: o.jobs ?? navigator.hardwareConcurrency, runs: 0, display, unsafe: unsafeModules(L, baseFiles) };
+  const E: Engine = { header, dir: tmp, bend: bendBin(), timeoutMs: o.timeoutMs ?? 120000, memMb: o.memMb ?? DEFAULT_MEM_MB, jobs: o.jobs ?? defaultJobs(), runs: 0, display, unsafe: unsafeModules(L, baseFiles) };
   const all = own.filter((d) => d.kind === "law");
   const laws = all.filter((d) => o.law === undefined || d.name === o.law);
   if (o.law !== undefined && laws.length === 0) throw new UsageError(`no law named ${o.law} in ${file}`);
@@ -1035,7 +1109,7 @@ async function checkLaw(L: Loaded, d: Decl, li: number, o: Options, U: Universe,
 
   // Premises of many instances in one declaration: the checker normalizes the whole tuple on both
   // sides, so one run decides every component (PLAN F22).
-  async function heldTuple(cands: Inst[]): Promise<{ kept: Inst[]; tooLarge: number } | null> {
+  async function heldTuple(cands: Inst[]): Promise<{ kept: Inst[]; tooLarge: number; timedOut: number } | null> {
     const groups: { inst: Inst; slots: Slot[] }[] = [];
     for (const c of cands) {
       const slots = texts(c).slots;
@@ -1048,8 +1122,8 @@ async function checkLaw(L: Loaded, d: Decl, li: number, o: Options, U: Universe,
       const chunk = groups.slice(start, start + CHUNK);
       const slots = chunk.flatMap((g) => g.slots);
       const item = { id: id(), claim: `{${nestPair(slots.map((s) => s.lhs))} == ${nestPair(slots.map((s) => s.rhs))} : ${nestType(slots.map((s) => s.type))}}` };
-      const { out, timedOut } = await runBatch(E, [item]);
-      if (timedOut || overflowed(out)) return null;
+      const { out, timedOut, overMemory } = await runBatch(E, [item]);
+      if (timedOut || overMemory || overflowed(out)) return null;
       const loc = locate(out);
       if (loc === null) {
         if (!cleanCheck(out)) return null;
@@ -1068,11 +1142,11 @@ async function checkLaw(L: Loaded, d: Decl, li: number, o: Options, U: Universe,
         k += g.slots.length;
       }
     }
-    return { kept, tooLarge: 0 };
+    return { kept, tooLarge: 0, timedOut: 0 };
   }
 
-  async function holding(cands: Inst[]): Promise<{ kept: Inst[]; tooLarge: number } | string> {
-    if (p.premises.length === 0) return { kept: cands, tooLarge: 0 };
+  async function holding(cands: Inst[]): Promise<{ kept: Inst[]; tooLarge: number; timedOut: number } | string> {
+    if (p.premises.length === 0) return { kept: cands, tooLarge: 0, timedOut: 0 };
     if (E.unsafe.length === 0) {
       const batched = await heldTuple(cands);
       if (batched !== null) return batched;
@@ -1083,13 +1157,16 @@ async function checkLaw(L: Loaded, d: Decl, li: number, o: Options, U: Universe,
     const bad = all.find((x) => x.r === "undecidable" || x.r === "illtyped" || x.r === "error" || x.r === "unsafe");
     if (bad) return bad.r === "unsafe" ? `premise relies on ${unsafeText(bad.count)}` : `premise ${bad.r === "undecidable" ? "not decidable by evaluation" : "could not be evaluated"}: ${(bad as any).detail}`;
     if (E.unsafe.length > 0 && all.some((x) => x.r === "open")) return `premise relies on ${unsafeFilesText(E.unsafe)}`;
-    let tooLarge = 0;
+    let tooLarge = 0, timedOut = 0;
     const kept = cands.filter((_, i) => {
       const outs = items[i].map((it) => res.get(it.id)!);
+      // one false premise decides the instance, whatever its other premises did
+      if (outs.some((o) => o.r === "fail")) return false;
       if (outs.some((o) => o.r === "toolarge")) { tooLarge++; return false; }
+      if (outs.some((o) => o.r === "timeout")) { timedOut++; return false; }
       return outs.every((it) => it.r === "pass" || it.r === "open");
     });
-    return { kept, tooLarge };
+    return { kept, tooLarge, timedOut };
   }
 
   // Claims of many instances in one declaration, like premises: the checker prints every failing
@@ -1105,8 +1182,8 @@ async function checkLaw(L: Loaded, d: Decl, li: number, o: Options, U: Universe,
       const slots = ts.slice(start, start + CHUNK).map((t) => t.claimSlot as Slot);
       const bid = id();
       const claim = `{${nestPair(slots.map((s) => s.lhs))} == ${nestPair(slots.map((s) => s.rhs))} : ${nestType(slots.map((s) => s.type))}}`;
-      const { out: raw, timedOut } = await runBatch(E, [{ id: bid, claim }]);
-      if (timedOut || overflowed(raw)) return null;
+      const { out: raw, timedOut, overMemory } = await runBatch(E, [{ id: bid, claim }]);
+      if (timedOut || overMemory || overflowed(raw)) return null;
       const loc = locate(raw);
       if (loc === null) {
         if (!cleanCheck(raw)) return null;
@@ -1137,7 +1214,7 @@ async function checkLaw(L: Loaded, d: Decl, li: number, o: Options, U: Universe,
     for (const [a, t] of inst.types) envTy.set(a, { t: "app", head: t, args: [], paren: false });
     const cap = Math.min(o.maxInstances, 64);
     const perW = p.exs.map((e) => {
-      const ty = substTy(e.ty, envTy);
+      const ty = substTy(substTy(e.ty, envTy), indexEnv(p, p.values.length, inst.vals));
       const out = new Map<string, Val>();
       for (const v of U.enumerate(ty, o.size)) if (out.size < cap) out.set(render(v), v);
       try {
@@ -1188,13 +1265,23 @@ async function checkLaw(L: Loaded, d: Decl, li: number, o: Options, U: Universe,
     const held = await holding(insts);
     if (typeof held === "string") return { ...base, reason: held };
     const sat = held.kept;
-    let tooLarge = held.tooLarge;
-    if (tooLarge > 0) base.tooLarge = tooLarge;
+    let tooLarge = held.tooLarge, timedOut = held.timedOut;
+    const dropped = (more: { tooLarge?: number; timedOut?: number }) => {
+      tooLarge += more.tooLarge ?? 0;
+      timedOut += more.timedOut ?? 0;
+      if (tooLarge > 0) base.tooLarge = tooLarge;
+      if (timedOut > 0) base.timedOut = timedOut;
+    };
+    dropped({});
+    base.generated = insts.length;
     base.instances = sat.length;
     if (p.premises.length) base.premise = { satisfied: sat.length, total: insts.length };
+    // a refutation's instances are its decided premises: the ones that do not hold are its passes
+    if (p.kind === "refutation") base.instances = insts.length - tooLarge - timedOut;
+    else if (p.premises.length) base.premiseFalse = insts.length - sat.length - tooLarge - timedOut;
     if (sat.length === 0) {
-      if (tooLarge > 0 && tooLarge === insts.length) return { ...base, status: "skip", reason: "every instance was too large to evaluate (lower --max-nat)" };
-      if (p.kind === "refutation") return { ...base, status: "pass", instances: insts.length };
+      if (tooLarge + timedOut > 0 && tooLarge + timedOut === insts.length) return { ...base, status: "skip", reason: noneEvaluated(p, tooLarge, timedOut, E.timeoutMs) };
+      if (p.kind === "refutation") return { ...base, status: "pass" };
       return { ...base, status: "skip", reason: `premises satisfied in 0/${insts.length} instances — law untested (vacuous in this space)` };
     }
     if (p.exs.length > 0) {
@@ -1206,8 +1293,11 @@ async function checkLaw(L: Loaded, d: Decl, li: number, o: Options, U: Universe,
         const items = combos.map((extra) => ({ id: id(), claim: texts(inst, extra).claim }));
         const res = await evaluateAll(E, items);
         for (const out of res.values()) { const pr = problem(out); if (pr) return pr; }
-        if (!items.some((it) => res.get(it.id)!.r === "pass")) missed++;
+        if (items.some((it) => res.get(it.id)!.r === "pass")) continue;
+        if (items.some((it) => res.get(it.id)!.r === "timeout")) { dropped({ timedOut: 1 }); base.instances--; }
+        else missed++;
       }
+      if (missed === 0 && base.instances === 0) return { ...base, status: "skip", reason: noneEvaluated(p, tooLarge, timedOut, E.timeoutMs) };
       if (missed === 0) return { ...base, status: "pass" };
       return { ...base, status: "skip", reason: `no witness found in ${tried} candidates` };
     }
@@ -1227,7 +1317,7 @@ async function checkLaw(L: Loaded, d: Decl, li: number, o: Options, U: Universe,
         if (predictTooLarge(claims[i])) predicted++;
         else live.push(sat[i]);
       }
-      if (predicted > 0) { tooLarge += predicted; base.tooLarge = tooLarge; }
+      dropped({ tooLarge: predicted });
       const batched = E.unsafe.length === 0 ? await claimBatches(live) : null;
       let items: Item[];
       let res: Map<string, Outcome>;
@@ -1245,14 +1335,14 @@ async function checkLaw(L: Loaded, d: Decl, li: number, o: Options, U: Universe,
       for (const out of res.values()) { const pr = problem(out); if (pr) return pr; }
       const outs = [...res.values()];
       passed = outs.filter((o) => o.r === "pass" || o.r === "open").length;
-      const claimTooLarge = outs.filter((o) => o.r === "toolarge").length;
-      if (claimTooLarge > 0) { tooLarge += claimTooLarge; base.tooLarge = tooLarge; }
+      dropped({ tooLarge: outs.filter((o) => o.r === "toolarge").length, timedOut: outs.filter((o) => o.r === "timeout").length });
       failing = live.map((inst, i) => ({ inst, out: res.get(items[i].id)! })).filter((x) => x.out.r === "fail");
+      base.instances = passed + failing.length;
       if (o.native) base.native = await nativeCheck(live, items, res);
     }
     base.failures = failing.length;
     if (failing.length === 0) {
-      if (tooLarge > 0 && passed === 0) return { ...base, status: "skip", reason: "every instance was too large to evaluate (lower --max-nat)" };
+      if (tooLarge + timedOut > 0 && passed === 0) return { ...base, status: "skip", reason: noneEvaluated(p, tooLarge, timedOut, E.timeoutMs) };
       return { ...base, status: "pass" };
     }
     const size = (x: Inst) => x.vals.reduce((s, v) => s + measure(v), 0);
@@ -1266,12 +1356,19 @@ async function checkLaw(L: Loaded, d: Decl, li: number, o: Options, U: Universe,
       failing.sort((a, b) => size(a.inst) - size(b.inst));
       original = failing[0].inst;
       cur = failing[0];
+      const dep = dependents(p);
+      const choice = p.typeParams.length ? cur.inst.types.get(p.typeParams[0])! : "";
+      // a shrunk index binder narrows the words indexed by it
+      const refit = (vals: Val[]) => {
+        for (let i = 0; i < vals.length; i++) if (dep[i]) vals[i] = U.fit(binderTy(p, i, choice, vals), vals[i]);
+        return vals;
+      };
       for (; steps < 200; steps++) {
         const seen = new Set<string>();
         const cands: Inst[] = [];
         cur.inst.vals.forEach((v, i) => {
           for (const s of U.shrink(v)) {
-            const vals = cur.inst.vals.map((w, j) => (j === i ? s : w));
+            const vals = refit(cur.inst.vals.map((w, j) => (j === i ? s : w)));
             const k = vals.map((x) => render(x)).join("|");
             if (!seen.has(k)) { seen.add(k); cands.push({ vals, types: cur.inst.types, funs: cur.inst.funs }); }
           }
@@ -1427,7 +1524,7 @@ export async function mutate(file: string, o: MutateOptions): Promise<MutateRepo
   if (!fs.existsSync(abs)) throw new UsageError(`no such file: ${file}`);
   const opts: Options = {
     size: o.size ?? 3, maxInstances: o.maxInstances ?? 50, seed: o.seed ?? 1,
-    law: o.law, impl: o.impl, jobs: o.jobs, timeoutMs: o.timeoutMs, tmpDir: o.tmpDir, maxNat: o.maxNat,
+    law: o.law, impl: o.impl, jobs: o.jobs, timeoutMs: o.timeoutMs, memMb: o.memMb, tmpDir: o.tmpDir, maxNat: o.maxNat,
     shrink: o.shrink, firstFail: o.firstFail,
   };
   const tmp = o.tmpDir ?? fs.mkdtempSync(path.join(scratchBase(), "lawcheck-mut-"));
@@ -1498,7 +1595,7 @@ export async function mutate(file: string, o: MutateOptions): Promise<MutateRepo
   };
   // Mutants of one def run in a small pool; the global `slot()` semaphore still caps the bend
   // processes at `jobs`, so this overlaps their many short runs without oversubscribing (README).
-  const pool = Math.max(1, Math.floor((opts.jobs ?? navigator.hardwareConcurrency) / 4));
+  const pool = Math.max(1, Math.floor((opts.jobs ?? defaultJobs()) / 4));
   for (const d of defs) {
     const ms = mutants(targetText, d.name, defParams(targetText, d.name));
     const results: MutantResult[] = new Array(ms.length);
@@ -1517,7 +1614,18 @@ export async function mutate(file: string, o: MutateOptions): Promise<MutateRepo
         else {
           const undecided = rep.laws.find((l) => evaluated.has(l.name) && l.status !== "pass");
           const missed = [...evaluated].find((n) => !rep.laws.some((l) => l.name === n));
+          // a timed-out instance may be the one that would have killed the mutant
+          const slow = rep.laws.find((l) => evaluated.has(l.name) && (l.timedOut ?? 0) > 0);
+          // so can an instance the mutant made too large, past the drops the unmutated code already had
+          const baseLarge = (n: string) => baseReport.laws.find((b) => b.name === n)?.tooLarge ?? 0;
+          const large = rep.laws.find((l) => evaluated.has(l.name) && (l.tooLarge ?? 0) > baseLarge(l.name));
           if (undecided !== undefined) { res.status = "unknown"; res.detail = (undecided.reason ?? undecided.status).split("\n")[0]; }
+          else if (slow !== undefined) { res.status = "unknown"; res.detail = `law ${slow.name}: ${slow.timedOut} instance${slow.timedOut === 1 ? "" : "s"} timed out`; }
+          else if (large !== undefined) {
+            const more = (large.tooLarge ?? 0) - baseLarge(large.name);
+            res.status = "unknown";
+            res.detail = `law ${large.name}: ${more} more instance${more === 1 ? "" : "s"} too large than unmutated`;
+          }
           else if (missed !== undefined) { res.status = "unknown"; res.detail = `law ${missed} not evaluated`; }
         }
       } catch (e) {

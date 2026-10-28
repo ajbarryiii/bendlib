@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { hubHash, packageFiles } from "./hash.ts";
-import { baseNames, BEND, LOCK_FORMAT, parseLock, parseModule, packageModules, ROOT, type LockEntry } from "./lib.ts";
+import { baseNames, BEND, LOCK_FORMAT, parseLock, parseModule, packageModules, ROOT, rssSource, treeRssKb, type LockEntry } from "./lib.ts";
 import { lockAgainstErrors } from "./lock.ts";
 import { headerVersionError, loginError, publish, regenerateIndex, verdictError } from "./release.ts";
 
@@ -864,5 +864,25 @@ test("hash: a missing, non-file or climbing entry is a typed usage error, exit 2
     expect(r.out).toContain("usage: bun tools/mathlib/hash.ts");
     expect(r.out).not.toMatch(STACK);
   }
+});
+
+test.skipIf(process.platform !== "linux")("treeRssKb: the ps measure of a process tree agrees with /proc, children included", async () => {
+  expect(rssSource()).toBe("proc");
+  // bash waits on a child that holds 64 MB it has written, so the tree's size is mostly the child's
+  const hold = "const b = Buffer.alloc(64 << 20, 1); setTimeout(() => b.length, 30000)";
+  const p = Bun.spawn(["bash", "-c", `"$0" -e '${hold}' & wait`, process.execPath], { stdout: "ignore", stderr: "ignore" });
+  try {
+    for (let i = 0; i < 100 && treeRssKb(p.pid, "proc") < 64 * 1024; i++) await Bun.sleep(100);
+    const before = treeRssKb(p.pid, "proc"), ps = treeRssKb(p.pid, "ps"), after = treeRssKb(p.pid, "proc");
+    expect(before).toBeGreaterThan(64 * 1024);
+    expect(ps).toBeGreaterThan(Math.min(before, after) * 0.8);
+    expect(ps).toBeLessThan(Math.max(before, after) * 1.2);
+    expect(treeRssKb(999999999, "ps")).toBe(0);
+  } finally {
+    Bun.spawnSync(["pkill", "-9", "-P", String(p.pid)]);
+    p.kill(9);
+  }
+  await p.exited;
+  expect(treeRssKb(p.pid, "ps")).toBe(0);
 });
 

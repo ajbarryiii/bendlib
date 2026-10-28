@@ -5,6 +5,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { treeRssKb } from "../../mathlib/lib.ts";
 
 export type Item = { id: string; claim: string; hole?: boolean };
 
@@ -15,6 +16,7 @@ export type Outcome =
   | { r: "undecidable"; detail: string }
   | { r: "illtyped"; detail: string }
   | { r: "toolarge" }
+  | { r: "timeout" }
   | { r: "unsafe"; count: number }
   | { r: "open" }
   | { r: "error"; detail: string };
@@ -26,6 +28,7 @@ export type Engine = {
   dir: string;
   bend: string;
   timeoutMs: number;
+  memMb: number;
   jobs: number;
   runs: number;
   display: (s: string) => string;
@@ -36,6 +39,17 @@ export function bendBin(): string {
   if (process.env.BEND_BIN) return process.env.BEND_BIN;
   const home = path.join(os.homedir(), ".bend", "bin", "bend");
   return fs.existsSync(home) ? home : "bend";
+}
+
+const GIB = 1024 ** 3;
+/** Default `--mem-mb`: the resident memory one bend process may use before it is killed. */
+export const DEFAULT_MEM_MB = 1024;
+
+/** Default `--jobs`: at most 4 bend processes, fewer with few cores or under 2 GiB free memory each. */
+export function defaultJobs(): number {
+  // macOS counts its file cache as used, so freemem() stays tiny there and would always give 1
+  const free = process.platform === "darwin" ? os.totalmem() / 2 : os.freemem();
+  return Math.max(1, Math.min(4, os.availableParallelism(), Math.floor(free / (2 * GIB))));
 }
 
 let active = 0;
@@ -53,26 +67,31 @@ export async function slot<T>(jobs: number, fn: () => Promise<T>): Promise<T> {
   }
 }
 
-let counter = 0;
+export type Run = { out: string; code: number | null; timedOut: boolean; overMemory: boolean };
 
-export async function runBatch(E: Engine, items: Item[]): Promise<{ out: string; code: number | null; timedOut: boolean }> {
-  const file = path.join(E.dir, `b${counter++}.bend`);
-  const src = [E.header, ...items.map((it) => `law ${it.id}:\n  ${it.claim}\n\ndef ${it.id}():\n  ${it.hole ? "?g" : "{==}"}\n`)].join("\n");
-  fs.writeFileSync(file, src);
+/** Runs one bend process in a job slot, killed at the timeout or above `E.memMb` resident memory. */
+export function runBounded(E: Engine, args: string[]): Promise<Run> {
   return slot(E.jobs, async () => {
     E.runs++;
-    const p = Bun.spawn([E.bend, file, "--check-only"], {
-      env: { ...process.env, BEND_NO_TELEMETRY: "1" },
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    let timedOut = false;
+    const p = Bun.spawn(args, { env: { ...process.env, BEND_NO_TELEMETRY: "1" }, stdout: "pipe", stderr: "pipe" });
+    let timedOut = false, overMemory = false;
     const timer = setTimeout(() => { timedOut = true; p.kill(); }, E.timeoutMs);
+    const watch = setInterval(() => { if (treeRssKb(p.pid) > E.memMb * 1024) { overMemory = true; p.kill(9); } }, 200);
     const [o, e] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text()]);
     const code = await p.exited;
     clearTimeout(timer);
-    return { out: o + e, code, timedOut };
+    clearInterval(watch);
+    return { out: o + e, code, timedOut, overMemory };
   });
+}
+
+let counter = 0;
+
+export async function runBatch(E: Engine, items: Item[]): Promise<Run> {
+  const file = path.join(E.dir, `b${counter++}.bend`);
+  const src = [E.header, ...items.map((it) => `law ${it.id}:\n  ${it.claim}\n\ndef ${it.id}():\n  ${it.hole ? "?g" : "{==}"}\n`)].join("\n");
+  fs.writeFileSync(file, src);
+  return runBounded(E, [E.bend, file, "--check-only"]);
 }
 
 type Located = { def: string; expected: string | null; observed: string | null; pointed: string; text: string };
@@ -117,26 +136,35 @@ function unsafeVerdict(out: string): { count: number; defs: string[] } | null {
 // A huge unary Nat can overflow either the checker's own guard or the host JS
 // stack, depending on the term (F31).
 export const overflowed = (out: string) => /the machine stack overflowed|Maximum call stack size exceeded/.test(out);
+// When only timeouts split a batch it spends at most 11 timed-out runs and 6 timeouts of wall time.
+// Memory and overflow splits and reruns after a fail are not charged; the halving depth bounds them.
+export const TIMEOUT_BUDGET = 6;
+
 /** Evaluates every item; with `stopAtFail`, returns as soon as one item genuinely fails. */
-export async function evaluate(E: Engine, items: Item[], stopAtFail = false, stopAtUndecidable = false): Promise<Map<string, Outcome>> {
+export async function evaluate(E: Engine, items: Item[], stopAtFail = false, stopAtUndecidable = false, budget = { timeouts: 0 }): Promise<Map<string, Outcome>> {
   const res = new Map<string, Outcome>();
   let rest = items;
+  const halves = async () => {
+    const mid = Math.ceil(rest.length / 2);
+    const ms = await Promise.all([rest.slice(0, mid), rest.slice(mid)].map((h) => evaluate(E, h, stopAtFail, stopAtUndecidable, budget)));
+    for (const m of ms) for (const [k, v] of m) res.set(k, v);
+  };
   while (rest.length > 0) {
-    const { out, timedOut } = await runBatch(E, rest);
+    const { out, timedOut, overMemory } = await runBatch(E, rest);
     if (timedOut) {
-      for (const it of rest) res.set(it.id, { r: "error", detail: `bend timed out after ${E.timeoutMs} ms` });
+      // A timed-out run may split only while the batch has seen fewer than TIMEOUT_BUDGET of them, which
+      // isolates one slow instance among 32. Past that the instances stay undecided: timed out, never passed.
+      budget.timeouts++;
+      if (rest.length > 1 && budget.timeouts < TIMEOUT_BUDGET) await halves();
+      else for (const it of rest) res.set(it.id, { r: "timeout" });
       break;
     }
-    const loc = locate(out);
+    const loc = overMemory ? null : locate(out);
     if (loc === null) {
-      if (!timedOut && overflowed(out)) {
-        if (rest.length === 1) {
-          res.set(rest[0].id, { r: "toolarge" });
-        } else {
-          const mid = Math.ceil(rest.length / 2);
-          const halves = await Promise.all([evaluate(E, rest.slice(0, mid), stopAtFail, stopAtUndecidable), evaluate(E, rest.slice(mid), stopAtFail, stopAtUndecidable)]);
-          for (const m of halves) for (const [k, v] of m) res.set(k, v);
-        }
+      // a batch killed over the memory limit is split like an overflow, down to the instance too large to evaluate
+      if (overMemory || overflowed(out)) {
+        if (rest.length === 1) res.set(rest[0].id, { r: "toolarge" });
+        else await halves();
         break;
       }
       const unsafe = unsafeVerdict(out);

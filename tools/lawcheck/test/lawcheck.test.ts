@@ -7,6 +7,8 @@ import * as path from "node:path";
 import { rewrite, splitEquation } from "../src/terms.ts";
 import { parseTy, showTy } from "../src/types.ts";
 import { importablePath, predictTooLarge } from "../src/lawcheck.ts";
+import { evaluate, TIMEOUT_BUDGET, type Engine } from "../src/checker.ts";
+import { mulberry32, render, Universe, Unsupported } from "../src/values.ts";
 
 const CLI = path.join(import.meta.dir, "..", "cli.ts");
 const FX = path.join(import.meta.dir, "fixtures");
@@ -35,6 +37,8 @@ const law = (report: any, name: string) => {
   if (!l) throw new Error(`no law ${name} in report`);
   return l;
 };
+/** Evaluated, premise-false, too-large and timed-out instances partition the generated ones. */
+const addsUp = (l: any) => expect([l.name, l.instances + (l.tooLarge ?? 0) + (l.timedOut ?? 0) + (l.premiseFalse ?? 0)]).toEqual([l.name, l.generated]);
 const binds = (l: any) => Object.fromEntries(l.counterexample.bindings.map((b: any) => [b.name, b.value]));
 
 // One `correct.bend` run, shared by the two tests that assert on a clean module.
@@ -52,6 +56,7 @@ describe("correct implementation", () => {
       ["le_dbl", "pass", "predicate"],
     ]);
     for (const l of report.laws) expect(l.instances).toBeGreaterThan(0);
+    for (const l of report.laws) addsUp(l);
     expect(law(report, "ins_sorted").premise.satisfied).toBeLessThan(law(report, "ins_sorted").premise.total);
   }, T);
 });
@@ -242,7 +247,7 @@ describe("random Nat bound, list length, Type predicates, function equations", (
     expect(code).toBe(0);
     const l = law(report, "all_too_large");
     expect(l.status).toBe("skip");
-    expect(l.reason).toMatch(/^every instance was too large to evaluate/);
+    expect(l.reason).toBe("every instance was too large to evaluate (the claim or its premises build unary Nats too large for the checker; lower --max-nat)");
     expect(l.tooLarge).toBeGreaterThan(0);
   }, T);
 });
@@ -256,6 +261,72 @@ describe("a file inside BEND_LIB", () => {
     expect(r.stderr).toBe("");
     expect(law(JSON.parse(r.stdout), "first_uncons").status).toBe("pass");
   }, T);
+});
+
+describe("Word(n) values", () => {
+  const zeros32 = "WCon{False{}, ".repeat(32) + "WNil{}" + "}".repeat(32);
+  let wordRun: Promise<{ code: number; report: any }> | null = null;
+  const word = () => (wordRun ??= json(path.join(FX, "word.bend")));
+
+  test("literal widths: small ones exhaustively, Word(32n) through U32{w}", async () => {
+    const { code, report } = await word();
+    expect(code).toBe(1);
+    expect(law(report, "zero_to_nat").status).toBe("pass");
+    const comm = law(report, "add_comm3");
+    expect(comm.status).toBe("pass");
+    expect(comm.instances).toBe(64);
+    expect(law(report, "u32_not_not").status).toBe("pass");
+    expect(law(report, "u32_not_not").instances).toBeGreaterThan(0);
+    const inc = law(report, "u32_inc_bad");
+    expect(inc.status).toBe("fail");
+    expect(binds(inc)).toEqual({ w: zeros32 });
+    expect([inc.counterexample.expected, inc.counterexample.observed]).toEqual(["1", "0"]);
+  }, T);
+
+  test("a width bound by an earlier Nat binder (plain, -n, +n) is generated, not skipped", async () => {
+    const { report } = await word();
+    for (const name of ["not_complement", "not_not", "add_exact"]) {
+      const l = law(report, name);
+      expect([name, l.status]).toEqual([name, "pass"]);
+      expect(l.instances).toBeGreaterThan(0);
+    }
+    for (const l of report.laws) if (l.status === "pass") addsUp(l);
+    expect(law(report, "add_exact").premise.satisfied).toBeGreaterThan(0);
+    expect(law(report, "add_exact").premise.satisfied).toBeLessThan(law(report, "add_exact").premise.total);
+  }, T);
+
+  test("planted bugs over Word(n) shrink to a one-bit counterexample", async () => {
+    const { report } = await word();
+    const not = law(report, "not_to_nat_bad");
+    expect(not.status).toBe("fail");
+    expect(binds(not)).toEqual({ n: "1n", w: "WCon{False{}, WNil{}}" });
+    expect([not.counterexample.expected, not.counterexample.observed]).toEqual(["1n", "0n"]);
+    const add = law(report, "add_exact_bad");
+    expect(add.status).toBe("fail");
+    expect(binds(add)).toEqual({ n: "1n", a: "WCon{True{}, WNil{}}", b: "WCon{True{}, WNil{}}" });
+    expect(add.counterexample.lhs.value).toBe("0n");
+    expect(add.counterexample.rhs.value).toBe("2n");
+  }, T);
+
+  test("human output prints the Word counterexample", async () => {
+    const r = await run(path.join(FX, "word.bend"), "--law", "not_to_nat_bad");
+    expect(r.code).toBe(1);
+    expect(r.stderr).toBe("");
+    expect(r.stdout).toMatch(/\n +n = 1n\n +w = WCon\{False\{\}, WNil\{\}\}\n/);
+    expect(r.stdout).toContain("lhs  Word.to_nat(1n, Word.not(1n, WCon{False{}, WNil{}})) = 1n");
+  }, T);
+
+  test("enumeration covers every word of a small width and the edges of a wide one; fit resizes", () => {
+    const U = new Universe(new Map());
+    const all3 = U.enumerate(parseTy("Word(3n)")!, 1).map((v) => render(v));
+    expect(new Set(all3).size).toBe(8);
+    expect(U.enumerate(parseTy("Word(32n)")!, 0).map((v) => render(v))).toEqual([zeros32, "WCon{True{}, ".repeat(32) + "WNil{}" + "}".repeat(32)]);
+    expect(U.enumerate(parseTy("Word(32n)")!, 1).length).toBe(66);
+    expect(() => U.check(parseTy("Word(n)")!)).toThrow(Unsupported);
+    const w = { v: "word" as const, bits: [true, false, true] };
+    expect(render(U.fit(parseTy("Word(2n)")!, w))).toBe("WCon{True{}, WCon{False{}, WNil{}}}");
+    expect(U.shrink(w).map((v) => render(v))).toContain("WCon{True{}, WCon{True{}, WCon{False{}, WNil{}}}}");
+  });
 });
 
 describe("recursion through a list", () => {
@@ -311,6 +382,77 @@ describe("where premises and exs witnesses", () => {
 });
 
 describe("too-large instances and --max-nat", () => {
+  test("random U32s are mostly small, a few set the top bit; 4294967295 enters the enumeration at depth 3; shrinking reaches 0", () => {
+    const U = new Universe(new Map());
+    const ty = parseTy("U32")!;
+    const r = mulberry32(7);
+    const ns = Array.from({ length: 2000 }, () => (U.random(ty, 3, r) as { n: number }).n);
+    expect(ns.every((n) => Number.isInteger(n) && n >= 0 && n <= 4294967295)).toBe(true);
+    expect(ns.filter((n) => n <= 30).length).toBeGreaterThan(1500);
+    expect(ns.filter((n) => n > 65536).length).toBeLessThan(200);
+    expect(ns.filter((n) => n >= 2147483648).length).toBeGreaterThan(40);
+    expect(ns).toContain(4294967295);
+    expect(U.enumerate(ty, 2).map((v) => render(v))).toEqual(["0", "1", "2", "3"]);
+    expect(U.enumerate(ty, 3).map((v) => render(v))).toEqual(["0", "1", "2", "3", "4294967295"]);
+    expect(U.shrink({ v: "u32", n: 4294967295 }).map((v) => render(v))).toEqual(["0", "1", "2", "2147483647", "4294967294"]);
+    let x = { v: "u32" as const, n: 4294967295 };
+    for (let k = 0; k < 40 && x.n > 0; k++) {
+      const c = U.shrink(x) as (typeof x)[];
+      expect(c.map((y) => y.n)).toContain(0);
+      x = c.find((y) => y.n === Math.floor(x.n / 2)) ?? c[0];
+    }
+    expect(x.n).toBe(0);
+  });
+
+  const u32Law = (lines: string[]) => {
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "lawcheck-u32-")), "u32.bend");
+    fs.writeFileSync(file, ["import Base", "", ...lines].join("\n") + "\n");
+    return file;
+  };
+
+  test("a law's line adds up: evaluated, premises false and too large make up the generated instances", async () => {
+    const file = u32Law(["law small_add_comm:", "  for a: U32", "  for b: U32", "  for h: {Nat.is_lt(U32.to_nat(a), 3n) == True{} : Bool}",
+      "  {Nat.add(U32.to_nat(a), U32.to_nat(b)) == Nat.add(U32.to_nat(b), U32.to_nat(a)) : Nat}"]);
+    const r = await run(file, "--max-instances", "40", "--mem-mb", "300", "--jobs", "4");
+    expect(r.stderr).toBe("");
+    expect(r.code).toBe(0);
+    const m = /✓ small_add_comm +(\d+) instances, 0 failures \(sizes ≤ 3\), (\d+) with premises false, (\d+) too large to evaluate \((\d+) generated\)/.exec(r.stdout);
+    expect(m).not.toBeNull();
+    const [evaluated, premiseFalse, tooLarge, generated] = m!.slice(1).map(Number);
+    expect(generated).toBe(40);
+    expect(evaluated + premiseFalse + tooLarge).toBe(generated);
+    expect(Math.min(evaluated, premiseFalse, tooLarge)).toBeGreaterThan(0);
+  }, T);
+
+  // par(n) is True in 2^n steps and little memory: from about n = 22 it outlasts a 3 s timeout.
+  const PAR = ["def par(n: Nat) -> Bool:", "  match n:", "    case 0n:", "      True{}", "    case 1n++p:", "      Bool.and(par(p), par(p))", ""];
+
+  // Only x = 3 hangs, so with --max-nat 3 the batch 0..3 times out and only its slow half stays undecided.
+  test("timed-out instances get their own count on the law's line, are never passed, and fail only --strict", async () => {
+    const file = u32Law([...PAR, "law par_true:", "  for x: Nat", "  {par(Bool.pick(Nat, Nat.is_eq(x, 3n), 40n, 0n)) == True{} : Bool}"]);
+    const args = [file, "--max-instances", "10", "--max-nat", "3", "--timeout", "3000", "--jobs", "4", "--allow-skip", "par_true"];
+    const r = await run(...args);
+    expect(r.stderr).toBe("");
+    expect(r.code).toBe(0);
+    const m = /✓ par_true +(\d+) instances, 0 failures \(sizes ≤ 3\), (\d+) timed out \((\d+) generated\)/.exec(r.stdout);
+    expect(m).not.toBeNull();
+    const [evaluated, timedOut, generated] = m!.slice(1).map(Number);
+    expect([evaluated, timedOut, generated]).toEqual([3, 1, 4]);
+    const s = await run(...args, "--strict");
+    expect(s.stderr).toBe("");
+    expect(s.code).toBe(1);
+    expect(s.stdout).toContain("strict: par_true (1 timed out): timed-out instances fail --strict; raise --timeout");
+  }, T);
+
+  test("when every instance is too large and no binder is a plain Nat, the reason does not suggest --max-nat", async () => {
+    const file = u32Law(["law all_too_large_u32:", "  for a: U32", "  for _: {Nat.pow(20n, 25n) == 0n : Nat}", "  Empty"]);
+    const { code, report } = await json(file, "--jobs", "4", "--max-instances", "4");
+    expect(code).toBe(0);
+    const l = law(report, "all_too_large_u32");
+    expect(l.status).toBe("skip");
+    expect(l.reason).toBe("every instance was too large to evaluate (the claim or its premises build unary Nats too large for the checker)");
+  }, T);
+
   test("overflowing instances are dropped, not errors; a small counterexample still fails", async () => {
     const { code, report } = await json(path.join(FX, "pow.bend"), "--max-instances", "40");
     expect(code).toBe(1);
@@ -798,6 +940,52 @@ describe("catalog budget, exs witnesses, tool errors, bisection", () => {
       expect(r.stderr).toContain(`${flag} needs an integer`);
     }
   }, T);
+
+  // A stand-in checker that sleeps past the timeout on any batch holding a SLOW claim and
+  // otherwise reports, like bend, the first BAD claim in file order.
+  const slowEngine = (): Engine => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lawcheck-slow-"));
+    const bend = path.join(dir, "bend");
+    fs.writeFileSync(bend, [
+      "#!/bin/bash",
+      `grep -q SLOW "$1" && exec sleep 30`,
+      `awk '/^law /{id=substr($2,1,length($2)-1); getline; if ($0 ~ /BAD/) {print "Error:"; print "- expected : 1n"; print "- observed : 2n"; print "Location: " id; print "9>|   {==}"; f=1; exit}} END{if (!f) {print "ALL PROOFS CHECK"; print "Use --verdict for mathematical validity."}}' "$1"`,
+    ].join("\n") + "\n");
+    fs.chmodSync(bend, 0o755);
+    return { header: "import Base\n", dir, bend, timeoutMs: 1500, memMb: 1024, jobs: 4, runs: 0, display: (s) => s, unsafe: [] };
+  };
+
+  test("a slow instance is isolated down to itself; a failure in the other half is still found", async () => {
+    const E = slowEngine();
+    const items = Array.from({ length: 8 }, (_, i) => ({ id: `t${i}`, claim: i === 2 ? "{SLOW}" : i === 5 ? "{BAD}" : "{ok}" }));
+    const res = await evaluate(E, items);
+    expect(items.map((it) => [it.id, res.get(it.id)!.r])).toEqual([
+      ["t0", "pass"], ["t1", "pass"], ["t2", "timeout"], ["t3", "pass"], ["t4", "pass"], ["t5", "fail"], ["t6", "pass"], ["t7", "pass"],
+    ]);
+    expect(res.get("t5")).toEqual({ r: "fail", expected: "1n", observed: "2n" });
+  }, 60_000);
+
+  test("one slow instance in a batch of 32 is the only one timed out; the other 31 are decided", async () => {
+    const E = slowEngine();
+    const items = Array.from({ length: 32 }, (_, i) => ({ id: `s${i}`, claim: i === 7 ? "{SLOW}" : i === 20 ? "{BAD}" : "{ok}" }));
+    const res = await evaluate(E, items);
+    const want = items.map((it, i) => [it.id, i === 7 ? "timeout" : i === 20 ? "fail" : "pass"]);
+    expect(items.map((it) => [it.id, res.get(it.id)!.r])).toEqual(want);
+    // 1 + log2(32) timed-out runs along the slow instance's chain
+    expect(E.runs).toBeLessThanOrEqual(2 * 6 + 2);
+  }, 90_000);
+
+  for (const n of [8, 32]) {
+    test(`a batch of ${n} where every instance hangs stays bounded: at most 11 runs and 6 timeouts of wall time`, async () => {
+      const E = slowEngine();
+      const items = Array.from({ length: n }, (_, i) => ({ id: `h${i}`, claim: "{SLOW}" }));
+      const t0 = performance.now();
+      const res = await evaluate(E, items);
+      expect(items.map((it) => res.get(it.id)!.r)).toEqual(Array(n).fill("timeout"));
+      expect(E.runs).toBeLessThanOrEqual(1 + 2 * (TIMEOUT_BUDGET - 1));
+      expect(performance.now() - t0).toBeLessThan(TIMEOUT_BUDGET * E.timeoutMs + 3000);
+    }, 90_000);
+  }
 
   // n = 0 overflows the checker (9^9 in unary), so the first batch is bisected; every other
   // instance is undecidable, and the halves must still stop at the first one.
