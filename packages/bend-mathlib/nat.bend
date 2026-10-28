@@ -3762,6 +3762,50 @@ def min_le_max(a, b):
   +b = b
   le_trans(Nat.min(a, b), a, Nat.max(a, b), min_le_left(a, b), le_max_left(a, b))
 
+# Doubling is injective: double a = double b implies a = b.
+law double_inj:
+  for a: Nat
+  for b: Nat
+  for e: {Nat.double(a) == Nat.double(b) : Nat}
+  {a == b : Nat}
+
+def double_inj(a, b, e):
+  match a b:
+    case 0n 0n:
+      {==}
+    case 0n 1n+q:
+      Empty.absurd({0n == 1n+q : Nat}, zero_ne_succ(1n+Nat.double(q))(e))
+    case 1n+p 0n:
+      Empty.absurd({1n+p == 0n : Nat}, succ_ne_zero(1n+Nat.double(p))(e))
+    case 1n+p 1n+q:
+      Equal.cong(Nat, Nat, x => 1n+x, p, q, double_inj(p, q, succ_inj(Nat.double(p), Nat.double(q), succ_inj(1n+Nat.double(p), 1n+Nat.double(q), e))))
+
+def internal_double_ne_succ_double(a: Nat, b: Nat, e: {Nat.double(a) == 1n+Nat.double(b) : Nat}) -> Empty:
+  match a b:
+    case 0n _:
+      zero_ne_succ(Nat.double(b))(e)
+    case 1n+p 0n:
+      succ_ne_zero(Nat.double(p))(succ_inj(1n+Nat.double(p), 0n, e))
+    case 1n+p 1n+q:
+      internal_double_ne_succ_double(p, q, succ_inj(Nat.double(p), 1n+Nat.double(q), succ_inj(1n+Nat.double(p), 2n+Nat.double(q), e)))
+
+# An even number is not odd: double a differs from 1 + double b.
+law double_ne_succ_double:
+  for a: Nat
+  for b: Nat
+  {Nat.double(a) != 1n+Nat.double(b) : Nat}
+
+def double_ne_succ_double(a, b):
+  e => internal_double_ne_succ_double(a, b, e)
+
+# Two to a successor power is double the power: 2^(n+1) = double (2^n).
+law two_pow_succ:
+  for n: Nat
+  {Nat.pow(2n, 1n+n) == Nat.double(Nat.pow(2n, n)) : Nat}
+
+def two_pow_succ(n):
+  Equal.sym(Nat, Nat.double(Nat.pow(2n, n)), Nat.mul(2n, Nat.pow(2n, n)), double_eq_two_mul(Nat.pow(2n, n)))
+
 # --- generated: _sym twins (tools/mathlib/twins.ts), do not edit ---
 
 # Zero is a right identity for addition: x + 0 = x, reversed to rewrite toward the simple side.
@@ -4832,3 +4876,11 @@ law min_le_max_sym:
 
 def min_le_max_sym(a, b):
   Equal.sym(Bool, Nat.is_le(Nat.min(a, b), Nat.max(a, b)), True{}, min_le_max(a, b))
+
+# Two to a successor power is double the power: 2^(n+1) = double (2^n), reversed to rewrite toward the simple side.
+law two_pow_succ_sym:
+  for n: Nat
+  {Nat.double(Nat.pow(2n, n)) == Nat.pow(2n, 1n+n) : Nat}
+
+def two_pow_succ_sym(n):
+  Equal.sym(Nat, Nat.pow(2n, 1n+n), Nat.double(Nat.pow(2n, n)), two_pow_succ(n))

@@ -2563,6 +2563,12 @@
       "sha256": "3cec215dbce02eebfd660de5f04077221c68c66fe92fd40356d99a4f94008b71",
       "since": "0.7.1.0"
     },
+    "nat.double_inj": {
+      "kind": "law",
+      "text": "for a: Nat\nfor b: Nat\nfor e: {Nat.double(a) == Nat.double(b) : Nat}\n{a == b : Nat}",
+      "sha256": "f0e49671d82e81e360efec0fcbf92392c3ebef4085f24477a1fd3ffa68aadb88",
+      "since": null
+    },
     "nat.double_le_double": {
       "kind": "law",
       "text": "for a: Nat\nfor b: Nat\nfor h: le(a, b)\nle(Nat.double(a), Nat.double(b))",
@@ -2586,6 +2592,12 @@
       "text": "for a: Nat\nfor b: Nat\n{Nat.mul(Nat.double(a), b) == Nat.double(Nat.mul(a, b)) : Nat}",
       "sha256": "9b311c4eb240d7bcd779f723ab1b1ed701562e6267039a97b10290089716e3fb",
       "since": "0.7.1.0"
+    },
+    "nat.double_ne_succ_double": {
+      "kind": "law",
+      "text": "for a: Nat\nfor b: Nat\n{Nat.double(a) != 1n+Nat.double(b) : Nat}",
+      "sha256": "372ca08a01ba2f9df317b2eb67b34ba1aba8a19ecf4fe5ea587624193f20b7b8",
+      "since": null
     },
     "nat.double_sub": {
       "kind": "law",
@@ -4087,6 +4099,18 @@
       "sha256": "c0811c901ff23de5a9411e77e5530db0352c0aba7fb4668939cf779ee377cad3",
       "since": "0.7.1.0"
     },
+    "nat.two_pow_succ": {
+      "kind": "law",
+      "text": "for n: Nat\n{Nat.pow(2n, 1n+n) == Nat.double(Nat.pow(2n, n)) : Nat}",
+      "sha256": "066ff2420c0daac228d389a0c4e912dcffa57ce18b44fce2dae76e2389ffc9d0",
+      "since": null
+    },
+    "nat.two_pow_succ_sym": {
+      "kind": "law",
+      "text": "for n: Nat\n{Nat.double(Nat.pow(2n, n)) == Nat.pow(2n, 1n+n) : Nat}",
+      "sha256": "59c2b64f4e635ea7a7a17be77efdece182f27256ef58b74d955396c28d3192c3",
+      "since": null
+    },
     "nat.zero_add": {
       "kind": "law",
       "text": "for -x: Nat\n{Nat.add(0n, x) == x : Nat}",
@@ -4770,6 +4794,390 @@
       "text": "for a: U32\nfor b: U32\nfor h: {U32.is_eq(a, b) == True{} : Bool}\n{a == b : U32}",
       "sha256": "146885de0162b5fc3c9249e01a89d8ae31cfcd15b99b17b1082b03162fbf7f1f",
       "since": "0.4.0.0"
+    },
+    "u32.u32_add_exact": {
+      "kind": "law",
+      "text": "for a: U32\nfor b: U32\nfor h: MNat.lt(Nat.add(U32.to_nat(a), U32.to_nat(b)), Nat.pow(2n, 32n))\n{U32.to_nat(U32.add(a, b)) == Nat.add(U32.to_nat(a), U32.to_nat(b)) : Nat}",
+      "sha256": "ab19ee1c8f96807467a11ef963a258651066883bf7b840f65596be9b2d8d295b",
+      "since": null
+    },
+    "u32.u32_add_exact_sym": {
+      "kind": "law",
+      "text": "for a: U32\nfor b: U32\nfor h: MNat.lt(Nat.add(U32.to_nat(a), U32.to_nat(b)), Nat.pow(2n, 32n))\n{Nat.add(U32.to_nat(a), U32.to_nat(b)) == U32.to_nat(U32.add(a, b)) : Nat}",
+      "sha256": "77111f3602cd764fd491d4411b6fd7287009948e886826283f797e80797eea1b",
+      "since": null
+    },
+    "u32.u32_add_wrap": {
+      "kind": "law",
+      "text": "for a: U32\nfor b: U32\n{U32.to_nat(U32.add(a, b)) == Nat.mod(Nat.add(U32.to_nat(a), U32.to_nat(b)), Nat.pow(2n, 32n)) : Nat}",
+      "sha256": "3c1a3c38acdfa05b881b3b50a40a5ffd3f4f83ce3440e0657f10a705664b6bae",
+      "since": null
+    },
+    "u32.u32_add_wrap_sym": {
+      "kind": "law",
+      "text": "for a: U32\nfor b: U32\n{Nat.mod(Nat.add(U32.to_nat(a), U32.to_nat(b)), Nat.pow(2n, 32n)) == U32.to_nat(U32.add(a, b)) : Nat}",
+      "sha256": "ef6905564e61d19395e11a36b16e29ef23b9f4f634b2fe516b786acc808a17b4",
+      "since": null
+    },
+    "u32.u32_cmp_to_nat": {
+      "kind": "law",
+      "text": "for a: U32\nfor b: U32\n{U32.cmp(a, b) == Nat.cmp(U32.to_nat(a), U32.to_nat(b)) : Cmp}",
+      "sha256": "4157f28c82ab8333325f15f2c0dc68a3290824569b6675b3bef2e62126b034fc",
+      "since": null
+    },
+    "u32.u32_cmp_to_nat_sym": {
+      "kind": "law",
+      "text": "for a: U32\nfor b: U32\n{Nat.cmp(U32.to_nat(a), U32.to_nat(b)) == U32.cmp(a, b) : Cmp}",
+      "sha256": "19666de26dbcab309e5bd4310212088878a61912ef91b90e611a48974a7027d9",
+      "since": null
+    },
+    "u32.u32_from_nat_to_nat": {
+      "kind": "law",
+      "text": "for a: U32\n{U32.from_nat(U32.to_nat(a)) == a : U32}",
+      "sha256": "8e6d5890025214e8bad1f8798b72806bb37af6480da43d63a0f692b021f0908f",
+      "since": null
+    },
+    "u32.u32_from_nat_to_nat_sym": {
+      "kind": "law",
+      "text": "for a: U32\n{a == U32.from_nat(U32.to_nat(a)) : U32}",
+      "sha256": "d21ad8d0e5244e05e44cc66dd8219072ece6debc15229c7daf455234cf7ebeff",
+      "since": null
+    },
+    "u32.u32_inc_exact": {
+      "kind": "law",
+      "text": "for a: U32\nfor h: MNat.lt(1n+U32.to_nat(a), Nat.pow(2n, 32n))\n{U32.to_nat(U32.inc(a)) == 1n+U32.to_nat(a) : Nat}",
+      "sha256": "99de528db38cc9582da2e07218483d3dbcf21ee261735c4792cd49819b4ed8a8",
+      "since": null
+    },
+    "u32.u32_inc_exact_sym": {
+      "kind": "law",
+      "text": "for a: U32\nfor h: MNat.lt(1n+U32.to_nat(a), Nat.pow(2n, 32n))\n{1n+U32.to_nat(a) == U32.to_nat(U32.inc(a)) : Nat}",
+      "sha256": "eeca0a53bd0225c020df466c9ca45056bfdc6613cd579d3f3483879712bf40d7",
+      "since": null
+    },
+    "u32.u32_inc_wrap": {
+      "kind": "law",
+      "text": "for a: U32\n{U32.to_nat(U32.inc(a)) == Nat.mod(1n+U32.to_nat(a), Nat.pow(2n, 32n)) : Nat}",
+      "sha256": "143741fe91dd8406331f33aceef02129334dba1565c42532db7de919682564f6",
+      "since": null
+    },
+    "u32.u32_inc_wrap_sym": {
+      "kind": "law",
+      "text": "for a: U32\n{Nat.mod(1n+U32.to_nat(a), Nat.pow(2n, 32n)) == U32.to_nat(U32.inc(a)) : Nat}",
+      "sha256": "1259564f63805bb21ee4e190f2a2eb8531e1366b48f782299f581d1f6bb74c29",
+      "since": null
+    },
+    "u32.u32_is_eq_to_nat": {
+      "kind": "law",
+      "text": "for a: U32\nfor b: U32\n{U32.is_eq(a, b) == Nat.is_eq(U32.to_nat(a), U32.to_nat(b)) : Bool}",
+      "sha256": "f5b3dd20a5d1df87da499304ee2559f30ee0e8c3e80df24c5075ae8bf775dbb0",
+      "since": null
+    },
+    "u32.u32_is_eq_to_nat_sym": {
+      "kind": "law",
+      "text": "for a: U32\nfor b: U32\n{Nat.is_eq(U32.to_nat(a), U32.to_nat(b)) == U32.is_eq(a, b) : Bool}",
+      "sha256": "13a0295d66e713833f64262d51c1c27066dfea0c5aa6835135d140a598fc4188",
+      "since": null
+    },
+    "u32.u32_is_ge_to_nat": {
+      "kind": "law",
+      "text": "for a: U32\nfor b: U32\n{U32.is_ge(a, b) == Nat.is_ge(U32.to_nat(a), U32.to_nat(b)) : Bool}",
+      "sha256": "c45f1512d672c30ae94b8cbc656385e141e915abf945054597a780d73579c934",
+      "since": null
+    },
+    "u32.u32_is_ge_to_nat_sym": {
+      "kind": "law",
+      "text": "for a: U32\nfor b: U32\n{Nat.is_ge(U32.to_nat(a), U32.to_nat(b)) == U32.is_ge(a, b) : Bool}",
+      "sha256": "fc2f73744cba7a2f1ce01efaa6dac6e04b1818a11bac4ade352248687c502eff",
+      "since": null
+    },
+    "u32.u32_is_gt_to_nat": {
+      "kind": "law",
+      "text": "for a: U32\nfor b: U32\n{U32.is_gt(a, b) == Nat.is_gt(U32.to_nat(a), U32.to_nat(b)) : Bool}",
+      "sha256": "16f265b538c8ffffc06bd6c1a57710476954204475e3aae5324752945458e880",
+      "since": null
+    },
+    "u32.u32_is_gt_to_nat_sym": {
+      "kind": "law",
+      "text": "for a: U32\nfor b: U32\n{Nat.is_gt(U32.to_nat(a), U32.to_nat(b)) == U32.is_gt(a, b) : Bool}",
+      "sha256": "236c23f218d1adaa99f779209ad5e00f9c9364cbd43f1e68be2ddaeaf42be590",
+      "since": null
+    },
+    "u32.u32_is_le_to_nat": {
+      "kind": "law",
+      "text": "for a: U32\nfor b: U32\n{U32.is_le(a, b) == Nat.is_le(U32.to_nat(a), U32.to_nat(b)) : Bool}",
+      "sha256": "2fb19cc1e02c299e20686ba69044dfd665a98b311b237d7f5df61092fbc9795d",
+      "since": null
+    },
+    "u32.u32_is_le_to_nat_sym": {
+      "kind": "law",
+      "text": "for a: U32\nfor b: U32\n{Nat.is_le(U32.to_nat(a), U32.to_nat(b)) == U32.is_le(a, b) : Bool}",
+      "sha256": "659358072dbeb6ac2c5f70e235b147f7216cf5f0b7d1729cf39d554e86d66f8a",
+      "since": null
+    },
+    "u32.u32_is_lt_to_nat": {
+      "kind": "law",
+      "text": "for a: U32\nfor b: U32\n{U32.is_lt(a, b) == Nat.is_lt(U32.to_nat(a), U32.to_nat(b)) : Bool}",
+      "sha256": "4eadd33919fb7a112aa64615c2b001b3bc5e556a7a1fa6736b2e094ee1a7ea39",
+      "since": null
+    },
+    "u32.u32_is_lt_to_nat_sym": {
+      "kind": "law",
+      "text": "for a: U32\nfor b: U32\n{Nat.is_lt(U32.to_nat(a), U32.to_nat(b)) == U32.is_lt(a, b) : Bool}",
+      "sha256": "9800a51d8fd448245fa420e0fb445d2f735ac3eb22754019b13443321708d8a3",
+      "since": null
+    },
+    "u32.u32_is_ne_to_nat": {
+      "kind": "law",
+      "text": "for a: U32\nfor b: U32\n{U32.is_ne(a, b) == Nat.is_ne(U32.to_nat(a), U32.to_nat(b)) : Bool}",
+      "sha256": "f0c78f338fbc72881c7ce0f2f297da5b937c00426b2c8880e920245ec5979dc5",
+      "since": null
+    },
+    "u32.u32_is_ne_to_nat_sym": {
+      "kind": "law",
+      "text": "for a: U32\nfor b: U32\n{Nat.is_ne(U32.to_nat(a), U32.to_nat(b)) == U32.is_ne(a, b) : Bool}",
+      "sha256": "b2fb7535e3b57d1f5f486b32ce7118f79a8a5f43173e57fc6e9b2b5021deadc0",
+      "since": null
+    },
+    "u32.u32_max_to_nat": {
+      "kind": "law",
+      "text": "for a: U32\nfor b: U32\n{U32.to_nat(U32.max(a, b)) == Nat.max(U32.to_nat(a), U32.to_nat(b)) : Nat}",
+      "sha256": "f36287d67a522b48320ebe5205b37720047da8cf2f691dd10c6fff36ee13607c",
+      "since": null
+    },
+    "u32.u32_max_to_nat_sym": {
+      "kind": "law",
+      "text": "for a: U32\nfor b: U32\n{Nat.max(U32.to_nat(a), U32.to_nat(b)) == U32.to_nat(U32.max(a, b)) : Nat}",
+      "sha256": "f10a98cf450c6b6d489f9898ad0689a83dc80e3568b0db4c4ef9f505061db585",
+      "since": null
+    },
+    "u32.u32_min_to_nat": {
+      "kind": "law",
+      "text": "for a: U32\nfor b: U32\n{U32.to_nat(U32.min(a, b)) == Nat.min(U32.to_nat(a), U32.to_nat(b)) : Nat}",
+      "sha256": "923e961849fe1df3321547b94b38958133807128aefaf26af0bdf9464931afc6",
+      "since": null
+    },
+    "u32.u32_min_to_nat_sym": {
+      "kind": "law",
+      "text": "for a: U32\nfor b: U32\n{Nat.min(U32.to_nat(a), U32.to_nat(b)) == U32.to_nat(U32.min(a, b)) : Nat}",
+      "sha256": "99d81855cfd73e21ee28f6a47c5d3a2e75160ea02aa5f7f2ca3146b2d3ef678d",
+      "since": null
+    },
+    "u32.u32_sub_exact": {
+      "kind": "law",
+      "text": "for a: U32\nfor b: U32\nfor h: MNat.le(U32.to_nat(b), U32.to_nat(a))\n{U32.to_nat(U32.sub(a, b)) == Nat.sub(U32.to_nat(a), U32.to_nat(b)) : Nat}",
+      "sha256": "9d25bf93d84d9609c117489d5736e921d75eeb4c99b47667fc85052a701852fb",
+      "since": null
+    },
+    "u32.u32_sub_exact_sym": {
+      "kind": "law",
+      "text": "for a: U32\nfor b: U32\nfor h: MNat.le(U32.to_nat(b), U32.to_nat(a))\n{Nat.sub(U32.to_nat(a), U32.to_nat(b)) == U32.to_nat(U32.sub(a, b)) : Nat}",
+      "sha256": "ae5dc3dc670171aff9702f6bd777311e5c889f6a74c96a01a555bf73ac464796",
+      "since": null
+    },
+    "u32.u32_sub_wrap": {
+      "kind": "law",
+      "text": "for a: U32\nfor b: U32\n{U32.to_nat(U32.sub(a, b)) == Nat.mod(Nat.add(U32.to_nat(a), Nat.sub(Nat.pow(2n, 32n), U32.to_nat(b))), Nat.pow(2n, 32n)) : Nat}",
+      "sha256": "8603a7e8763259e16f35da542ed38f8f8ac39ccfed5812a4c4e6e6bc6109b953",
+      "since": null
+    },
+    "u32.u32_sub_wrap_sym": {
+      "kind": "law",
+      "text": "for a: U32\nfor b: U32\n{Nat.mod(Nat.add(U32.to_nat(a), Nat.sub(Nat.pow(2n, 32n), U32.to_nat(b))), Nat.pow(2n, 32n)) == U32.to_nat(U32.sub(a, b)) : Nat}",
+      "sha256": "e6caf3ee80cf4248370bbf3f9d0e0bbcebd9f6ef734ab52bf85dd499009807ae",
+      "since": null
+    },
+    "u32.u32_to_nat_from_nat": {
+      "kind": "law",
+      "text": "for k: Nat\nfor h: MNat.lt(k, Nat.pow(2n, 32n))\n{U32.to_nat(U32.from_nat(k)) == k : Nat}",
+      "sha256": "33268472bcb2a39671c7634821a4e4e5a9d44ab9cb5b6ab5f4168263188afc1e",
+      "since": null
+    },
+    "u32.u32_to_nat_from_nat_mod": {
+      "kind": "law",
+      "text": "for k: Nat\n{U32.to_nat(U32.from_nat(k)) == Nat.mod(k, Nat.pow(2n, 32n)) : Nat}",
+      "sha256": "20df2e7af443c63206b3ef9215cd826d700e3eae62d370d6cb74a911edd3c973",
+      "since": null
+    },
+    "u32.u32_to_nat_from_nat_mod_sym": {
+      "kind": "law",
+      "text": "for k: Nat\n{Nat.mod(k, Nat.pow(2n, 32n)) == U32.to_nat(U32.from_nat(k)) : Nat}",
+      "sha256": "77d73847e55fe82ea321b944968345572912d989ee10a0dd1c5d3e616e4b8da6",
+      "since": null
+    },
+    "u32.u32_to_nat_from_nat_sym": {
+      "kind": "law",
+      "text": "for k: Nat\nfor h: MNat.lt(k, Nat.pow(2n, 32n))\n{k == U32.to_nat(U32.from_nat(k)) : Nat}",
+      "sha256": "3675a3d7e44697ced76bf0119271c8a701846bf3bf1e75f494ae2028a306014b",
+      "since": null
+    },
+    "u32.u32_to_nat_inj": {
+      "kind": "law",
+      "text": "for a: U32\nfor b: U32\nfor e: {U32.to_nat(a) == U32.to_nat(b) : Nat}\n{a == b : U32}",
+      "sha256": "d482d36dfbb680d926611547b451e521650989beeda8c8511bf12186821a16e5",
+      "since": null
+    },
+    "u32.u32_to_nat_lt": {
+      "kind": "law",
+      "text": "for a: U32\nMNat.lt(U32.to_nat(a), Nat.pow(2n, 32n))",
+      "sha256": "b013809398c91ee7935ad6e2d71ea47f0c12c7549a21dfaee30396091a77bfee",
+      "since": null
+    },
+    "u32.word_adc_exact": {
+      "kind": "law",
+      "text": "for n: Nat\nfor a: Word(n)\nfor b: Word(n)\nfor c: Bool\nfor h: MNat.lt(Nat.add(Nat.add(Word.to_nat(n, a), Word.to_nat(n, b)), Bool.pick(Nat, c, 1n, 0n)), Nat.pow(2n, n))\n{Word.to_nat(n, Word.adc(n, a, b, False{}, c)) == Nat.add(Nat.add(Word.to_nat(n, a), Word.to_nat(n, b)), Bool.pick(Nat, c, 1n, 0n)) : Nat}",
+      "sha256": "ea1735e1fe63f9629edcbb2deaf6bd9ff2ba2546235632ef5d840d27fc5ef62a",
+      "since": null
+    },
+    "u32.word_adc_exact_sym": {
+      "kind": "law",
+      "text": "for n: Nat\nfor a: Word(n)\nfor b: Word(n)\nfor c: Bool\nfor h: MNat.lt(Nat.add(Nat.add(Word.to_nat(n, a), Word.to_nat(n, b)), Bool.pick(Nat, c, 1n, 0n)), Nat.pow(2n, n))\n{Nat.add(Nat.add(Word.to_nat(n, a), Word.to_nat(n, b)), Bool.pick(Nat, c, 1n, 0n)) == Word.to_nat(n, Word.adc(n, a, b, False{}, c)) : Nat}",
+      "sha256": "3b9bff75c5b1ed71e5a1d249a6a715a916405da0f8471eb2af882623f7064d2f",
+      "since": null
+    },
+    "u32.word_adc_overflow": {
+      "kind": "law",
+      "text": "for n: Nat\nfor a: Word(n)\nfor b: Word(n)\nfor c: Bool\nfor h: MNat.le(Nat.pow(2n, n), Nat.add(Nat.add(Word.to_nat(n, a), Word.to_nat(n, b)), Bool.pick(Nat, c, 1n, 0n)))\n{Nat.add(Word.to_nat(n, Word.adc(n, a, b, False{}, c)), Nat.pow(2n, n)) == Nat.add(Nat.add(Word.to_nat(n, a), Word.to_nat(n, b)), Bool.pick(Nat, c, 1n, 0n)) : Nat}",
+      "sha256": "7ed788813bd2d3c6f0d3fc48591017680a5d2974766cc87493ef2e14248c7a8d",
+      "since": null
+    },
+    "u32.word_adc_overflow_sym": {
+      "kind": "law",
+      "text": "for n: Nat\nfor a: Word(n)\nfor b: Word(n)\nfor c: Bool\nfor h: MNat.le(Nat.pow(2n, n), Nat.add(Nat.add(Word.to_nat(n, a), Word.to_nat(n, b)), Bool.pick(Nat, c, 1n, 0n)))\n{Nat.add(Nat.add(Word.to_nat(n, a), Word.to_nat(n, b)), Bool.pick(Nat, c, 1n, 0n)) == Nat.add(Word.to_nat(n, Word.adc(n, a, b, False{}, c)), Nat.pow(2n, n)) : Nat}",
+      "sha256": "e8a71f53406a245ac4c6c2da9fee0e8b6efba6854d5e3ec1670f88b614011b8d",
+      "since": null
+    },
+    "u32.word_adc_wrap": {
+      "kind": "law",
+      "text": "for n: Nat\nfor a: Word(n)\nfor b: Word(n)\nfor c: Bool\n{Word.to_nat(n, Word.adc(n, a, b, False{}, c)) == Nat.mod(Nat.add(Nat.add(Word.to_nat(n, a), Word.to_nat(n, b)), Bool.pick(Nat, c, 1n, 0n)), Nat.pow(2n, n)) : Nat}",
+      "sha256": "5f34464cb1e58dac3f72b278366945e033b8585c21479aad8fefbc7d49451e44",
+      "since": null
+    },
+    "u32.word_adc_wrap_sym": {
+      "kind": "law",
+      "text": "for n: Nat\nfor a: Word(n)\nfor b: Word(n)\nfor c: Bool\n{Nat.mod(Nat.add(Nat.add(Word.to_nat(n, a), Word.to_nat(n, b)), Bool.pick(Nat, c, 1n, 0n)), Nat.pow(2n, n)) == Word.to_nat(n, Word.adc(n, a, b, False{}, c)) : Nat}",
+      "sha256": "b16734443e1e76e82ae89ccd176e3176734e7b3fe7b44a23f88f3718ac33685c",
+      "since": null
+    },
+    "u32.word_add_exact": {
+      "kind": "law",
+      "text": "for n: Nat\nfor a: Word(n)\nfor b: Word(n)\nfor h: MNat.lt(Nat.add(Word.to_nat(n, a), Word.to_nat(n, b)), Nat.pow(2n, n))\n{Word.to_nat(n, Word.add(n, a, b)) == Nat.add(Word.to_nat(n, a), Word.to_nat(n, b)) : Nat}",
+      "sha256": "fb676902e89e756d3fc3d15a9eb182c75284f29149797a70c97020f5a01a1e9f",
+      "since": null
+    },
+    "u32.word_add_exact_sym": {
+      "kind": "law",
+      "text": "for n: Nat\nfor a: Word(n)\nfor b: Word(n)\nfor h: MNat.lt(Nat.add(Word.to_nat(n, a), Word.to_nat(n, b)), Nat.pow(2n, n))\n{Nat.add(Word.to_nat(n, a), Word.to_nat(n, b)) == Word.to_nat(n, Word.add(n, a, b)) : Nat}",
+      "sha256": "5c52b504b5a9db2d047d5017807bc06eb65a0a36d4b70774734feeb190278024",
+      "since": null
+    },
+    "u32.word_add_wrap": {
+      "kind": "law",
+      "text": "for n: Nat\nfor a: Word(n)\nfor b: Word(n)\n{Word.to_nat(n, Word.add(n, a, b)) == Nat.mod(Nat.add(Word.to_nat(n, a), Word.to_nat(n, b)), Nat.pow(2n, n)) : Nat}",
+      "sha256": "e43ae299fd9c60265dba5afa6be6410a1eed61e88392377db0037df1ee6a8858",
+      "since": null
+    },
+    "u32.word_add_wrap_sym": {
+      "kind": "law",
+      "text": "for n: Nat\nfor a: Word(n)\nfor b: Word(n)\n{Nat.mod(Nat.add(Word.to_nat(n, a), Word.to_nat(n, b)), Nat.pow(2n, n)) == Word.to_nat(n, Word.add(n, a, b)) : Nat}",
+      "sha256": "c5a38134e1b1f1bb73adce2bb970cf6d2e0894ba0c75dafea4586a91a99da162",
+      "since": null
+    },
+    "u32.word_cmp_to_nat": {
+      "kind": "law",
+      "text": "for n: Nat\nfor a: Word(n)\nfor b: Word(n)\n{Word.cmp(n, a, b) == Nat.cmp(Word.to_nat(n, a), Word.to_nat(n, b)) : Cmp}",
+      "sha256": "6536b856eee53109e705bf8baf70cf449515ef870fceb982186d6a392e04f349",
+      "since": null
+    },
+    "u32.word_cmp_to_nat_sym": {
+      "kind": "law",
+      "text": "for n: Nat\nfor a: Word(n)\nfor b: Word(n)\n{Nat.cmp(Word.to_nat(n, a), Word.to_nat(n, b)) == Word.cmp(n, a, b) : Cmp}",
+      "sha256": "9c9d73da2fb79b093f9e9652d3c40e74779b50e928aa30566db320295377cc3e",
+      "since": null
+    },
+    "u32.word_inc_exact": {
+      "kind": "law",
+      "text": "for n: Nat\nfor w: Word(n)\nfor h: MNat.lt(1n+Word.to_nat(n, w), Nat.pow(2n, n))\n{Word.to_nat(n, Word.inc(n, w)) == 1n+Word.to_nat(n, w) : Nat}",
+      "sha256": "4cde73ab9f1d3db39675a7ae7ddaa643c0d13ed3004e4e4b3c0e0900841d101e",
+      "since": null
+    },
+    "u32.word_inc_exact_sym": {
+      "kind": "law",
+      "text": "for n: Nat\nfor w: Word(n)\nfor h: MNat.lt(1n+Word.to_nat(n, w), Nat.pow(2n, n))\n{1n+Word.to_nat(n, w) == Word.to_nat(n, Word.inc(n, w)) : Nat}",
+      "sha256": "bc16382fdafc4519eb5beea1f82d6fe74dcc74602421c82ffc7f43440223821c",
+      "since": null
+    },
+    "u32.word_inc_wrap": {
+      "kind": "law",
+      "text": "for n: Nat\nfor w: Word(n)\n{Word.to_nat(n, Word.inc(n, w)) == Nat.mod(1n+Word.to_nat(n, w), Nat.pow(2n, n)) : Nat}",
+      "sha256": "7686c93483dbd62af340b2b53bd8b929bbd39925905e6c1456e1c1afaa962a22",
+      "since": null
+    },
+    "u32.word_inc_wrap_sym": {
+      "kind": "law",
+      "text": "for n: Nat\nfor w: Word(n)\n{Nat.mod(1n+Word.to_nat(n, w), Nat.pow(2n, n)) == Word.to_nat(n, Word.inc(n, w)) : Nat}",
+      "sha256": "21f6b745e3ad8b53f62fa7ffbfa12f9f8929c6d5d56c5834ee152e83669c15b4",
+      "since": null
+    },
+    "u32.word_not_add": {
+      "kind": "law",
+      "text": "for n: Nat\nfor w: Word(n)\n{1n+Nat.add(Word.to_nat(n, Word.not(n, w)), Word.to_nat(n, w)) == Nat.pow(2n, n) : Nat}",
+      "sha256": "3d3346a2da8041693a8c9dea19a6889f53bb3b97d6b643b0aa4899f16302bb3c",
+      "since": null
+    },
+    "u32.word_not_add_sym": {
+      "kind": "law",
+      "text": "for n: Nat\nfor w: Word(n)\n{Nat.pow(2n, n) == 1n+Nat.add(Word.to_nat(n, Word.not(n, w)), Word.to_nat(n, w)) : Nat}",
+      "sha256": "88cf214818b4362c7969ea766cb27016390c4858baf6a7b2d3105d3f257c817a",
+      "since": null
+    },
+    "u32.word_sub_exact": {
+      "kind": "law",
+      "text": "for n: Nat\nfor a: Word(n)\nfor b: Word(n)\nfor h: MNat.le(Word.to_nat(n, b), Word.to_nat(n, a))\n{Word.to_nat(n, Word.sub(n, a, b)) == Nat.sub(Word.to_nat(n, a), Word.to_nat(n, b)) : Nat}",
+      "sha256": "33e58cca871d32be21a7464db110fb9c919b312178c7f9d95856d9b715ca583e",
+      "since": null
+    },
+    "u32.word_sub_exact_sym": {
+      "kind": "law",
+      "text": "for n: Nat\nfor a: Word(n)\nfor b: Word(n)\nfor h: MNat.le(Word.to_nat(n, b), Word.to_nat(n, a))\n{Nat.sub(Word.to_nat(n, a), Word.to_nat(n, b)) == Word.to_nat(n, Word.sub(n, a, b)) : Nat}",
+      "sha256": "3a8ac1ce990422813deaa967b08fafb031a29ebedd8c1f6e329678648cdb6f27",
+      "since": null
+    },
+    "u32.word_sub_wrap": {
+      "kind": "law",
+      "text": "for n: Nat\nfor a: Word(n)\nfor b: Word(n)\n{Word.to_nat(n, Word.sub(n, a, b)) == Nat.mod(Nat.add(Word.to_nat(n, a), Nat.sub(Nat.pow(2n, n), Word.to_nat(n, b))), Nat.pow(2n, n)) : Nat}",
+      "sha256": "93b5116dc04a337ddc25f8cd5c233db7a5a6f55269586ad8f5a6670dbe4827f5",
+      "since": null
+    },
+    "u32.word_sub_wrap_sym": {
+      "kind": "law",
+      "text": "for n: Nat\nfor a: Word(n)\nfor b: Word(n)\n{Nat.mod(Nat.add(Word.to_nat(n, a), Nat.sub(Nat.pow(2n, n), Word.to_nat(n, b))), Nat.pow(2n, n)) == Word.to_nat(n, Word.sub(n, a, b)) : Nat}",
+      "sha256": "99dd776ffa604f90811a24a6c46a338bfdf095283ea8fe152c8b28438e9c8486",
+      "since": null
+    },
+    "u32.word_to_nat_inj": {
+      "kind": "law",
+      "text": "for n: Nat\nfor a: Word(n)\nfor b: Word(n)\nfor e: {Word.to_nat(n, a) == Word.to_nat(n, b) : Nat}\n{a == b : Word(n)}",
+      "sha256": "505938638fa7855bc423e1ee87bdd9358c7b568abdf66f936e16a42afa84a486",
+      "since": null
+    },
+    "u32.word_to_nat_lt": {
+      "kind": "law",
+      "text": "for n: Nat\nfor w: Word(n)\nMNat.lt(Word.to_nat(n, w), Nat.pow(2n, n))",
+      "sha256": "4227c168de64012b73612645609c0881d0bef68c23aa5e72252689cbac5b9b43",
+      "since": null
+    },
+    "u32.word_to_nat_zero": {
+      "kind": "law",
+      "text": "for n: Nat\n{Word.to_nat(n, Word.zero(n)) == 0n : Nat}",
+      "sha256": "486d7c48438fe5f8e6eeed37ded2a23b78efb9645579b06a9e3669d66ba5a307",
+      "since": null
+    },
+    "u32.word_to_nat_zero_sym": {
+      "kind": "law",
+      "text": "for n: Nat\n{0n == Word.to_nat(n, Word.zero(n)) : Nat}",
+      "sha256": "5b0d3707d888b35793dcf252134d47c8e21e250efa3500fc836d837116472c21",
+      "since": null
     }
   }
 }
