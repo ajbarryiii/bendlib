@@ -1,4 +1,4 @@
-# bend-mathlib: machine-checked lemmas for Bend 2 (Nat, Bool, List, String, Maybe, equality, order, algebra, permutations, sorting, machine words); import one module, e.g. bend-mathlib@0.7.5.0/nat.bend.
+# bend-mathlib: machine-checked lemmas for Bend 2 (Nat, Bool, List, String, Maybe, equality, order, algebra, permutations, sorting, machine words); import one module, e.g. bend-mathlib@0.8.0.0/nat.bend.
 # Source, lemma index and license: https://github.com/bendlib/bendlib
 import Base
 import ./equal.bend as MEqual
