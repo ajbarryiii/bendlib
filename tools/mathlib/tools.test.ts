@@ -1,14 +1,14 @@
 // Tests for the bend-mathlib tools against committed fixtures (real compiler runs).
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { hubHash, packageFiles } from "./hash.ts";
 import { baseNames, BEND, LOCK_FORMAT, parseLock, parseModule, packageModules, ROOT, rssSource, treeRssKb, type LockEntry } from "./lib.ts";
 import { lockAgainstErrors } from "./lock.ts";
-import { headerVersionError, loginError, publish, regenerateIndex, verdictError } from "./release.ts";
+import { devlibError, headerVersionError, loginError, publish, regenerateIndex, verdictError } from "./release.ts";
 
 const dir = import.meta.dir;
 const run = (script: string, ...args: string[]) => {
@@ -493,6 +493,35 @@ test("release: a correct header passes the gate and the run reaches the check ga
   expect(r.code).toBe(1);
   expect(r.out).not.toContain("release target is");
   expect(r.out).toContain("FAIL check");
+});
+
+test("release: devlibError refuses the devlib dir and a BEND_LIB holding a symlink, allows a plain cache (planted pair)", () => {
+  expect(devlibError(undefined)).toBeNull();
+  const plain = mkdtempSync(join(tmpdir(), "bend-release-lib-plain-"));
+  mkdirSync(join(plain, "0x00000000000000000000000000000000"));
+  expect(devlibError(plain)).toBeNull();
+  const linked = mkdtempSync(join(tmpdir(), "bend-release-lib-link-"));
+  symlinkSync(join(dir, "fixtures/good"), join(linked, "0x00000000000000000000000000000000"), "dir");
+  expect(devlibError(linked)).toContain(`BEND_LIB=${linked} holds the symlink`);
+  expect(devlibError(join(ROOT, ".devlib"))).toContain("is the devlib directory");
+});
+
+test("release: a symlinked BEND_LIB is a usage error before any gate (planted negative)", () => {
+  const linked = mkdtempSync(join(tmpdir(), "bend-release-lib-run-"));
+  symlinkSync(join(dir, "fixtures/good"), join(linked, "0x00000000000000000000000000000000"), "dir");
+  const r = runWith({ BEND_LIB: linked, BEND_CLI: FALSE }, "release.ts", join(dir, "fixtures/good"), "some-package-name", "0.1.0.0");
+  expect(r.code).toBe(2);
+  expect(r.out).toContain("not through devlib");
+  expect(r.out).not.toMatch(/(ok  |FAIL) check/);
+});
+
+test("release under devlib run is refused before the header check and any gate", () => {
+  const p = Bun.spawnSync([process.execPath, join(dir, "devlib.ts"), "run", "--", process.execPath, join(dir, "release.ts"), join(ROOT, "packages/bend-mathlib"), "bend-mathlib", "9.9.9.9"]);
+  const out = new TextDecoder().decode(p.stdout) + new TextDecoder().decode(p.stderr);
+  expect(p.exitCode).toBe(2);
+  expect(out).toContain("is the devlib directory");
+  expect(out).not.toContain("release target is");
+  expect(out).not.toMatch(/(ok  |FAIL) check/);
 });
 
 test("release: lock --freeze leaves README stale until regenerateIndex runs (the post-freeze path)", () => {

@@ -8,7 +8,7 @@
 //   regenerates the package README for the released version
 // exit: 0 ok · 1 a gate or verification failed · 2 usage
 
-import { appendFileSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, relative, basename, resolve } from "node:path";
 import { BEND, CLEAN, PkgError, ROOT, packageModules } from "./lib.ts";
@@ -40,6 +40,19 @@ export function headerVersionError(pkg: string, name: string, version: string): 
   const re = new RegExp(`(?:^|[^A-Za-z0-9-])${escaped}@(\\d+\\.\\d+\\.\\d+\\.\\d+)`, "g");
   const wrong = [...first.matchAll(re)].map((m) => m[1]).find((v) => v !== version);
   return wrong ? `${relative(ROOT, entry)}:1 names ${name}@${wrong}; the release target is ${name}@${version}` : null;
+}
+
+/** Why `BEND_LIB` would let a hub import resolve to local files (devlib's symlinks), else null. */
+export function devlibError(bendLib: string | undefined): string | null {
+  if (bendLib === undefined || bendLib === "") return null;
+  const real = (p: string) => { try { return realpathSync(p); } catch { return resolve(p); } };
+  // Under such a BEND_LIB, `bend --publish` takes a hub import for a local file and bundles its package.
+  const refuse = (why: string) => `BEND_LIB=${bendLib} ${why}; a publish would bundle local packages. Run release.ts directly, not through devlib (its gates fetch hub imports themselves)`;
+  if (real(bendLib) === real(join(ROOT, ".devlib"))) return refuse("is the devlib directory");
+  let entries;
+  try { entries = readdirSync(bendLib, { withFileTypes: true }); } catch { return null; }
+  const link = entries.find((e) => e.isSymbolicLink());
+  return link ? refuse(`holds the symlink ${link.name}`) : null;
 }
 
 /** Regenerate the package README for `version`; run after `lock --freeze` so its since cells are final. */
@@ -108,6 +121,8 @@ async function main(): Promise<void> {
     console.error(`release: package directory ${pkg} does not exist`);
     process.exit(1);
   }
+  const devlib = devlibError(process.env.BEND_LIB);
+  if (devlib) usage(devlib);
   const header = headerVersionError(pkg, name, version);
   if (header) fail(header);
   if (doPublish) {
