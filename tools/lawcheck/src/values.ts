@@ -38,9 +38,9 @@ export function mulberry32(seed: number): Rng {
 const pick = <T>(r: Rng, xs: T[]): T => xs[Math.floor(r() * xs.length)];
 const int = (r: Rng, lo: number, hi: number) => lo + Math.floor(r() * (hi - lo + 1));
 
-// Widths for a Nat binder that a later `Word(n)` binder is indexed by. No 32: a claim building 2^32,
-// such as Nat.pow(2n, n), times the checker out instead of overflowing (F31). Word(32n) still gets 32.
-export const WORD_WIDTHS = [0, 1, 2, 3, 4, 5, 6, 8, 16];
+// Widths for a Nat binder that a later `Word(n)` binder is indexed by. At most 12: a claim taking
+// Word.to_nat at 16 bits builds unary Nats near 2^16 and is dropped as too large (F31). Word(32n) still gets 32.
+export const WORD_WIDTHS = [0, 1, 2, 3, 4, 5, 6, 8, 12];
 
 function wordWidth(ty: Ty): number {
   const a = ty.t === "app" ? ty.args[0] : undefined;
