@@ -3806,6 +3806,27 @@ law two_pow_succ:
 def two_pow_succ(n):
   Equal.sym(Nat, Nat.double(Nat.pow(2n, n)), Nat.mul(2n, Nat.pow(2n, n)), double_eq_two_mul(Nat.pow(2n, n)))
 
+# Increasing a positive divisor cannot increase the quotient: 0 < s <= t implies a / t <= a / s.
+law div_antitone:
+  for +a: Nat
+  for +s: Nat
+  for +t: Nat
+  for st: le(s, t)
+  for positive: lt(0n, s)
+  le(Nat.div(a, t), Nat.div(a, s))
+
+def div_antitone(a, s, t, st, positive):
+  match s t:
+    case 0n _:
+      Empty.absurd(le(Nat.div(a, t), Nat.div(a, 0n)), internal_false_ne_true(positive))
+    case 1n+sp 0n:
+      Empty.absurd(le(Nat.div(a, 0n), Nat.div(a, 1n+sp)), internal_false_ne_true(st))
+    case 1n++sp 1n++tp:
+      +q = Nat.div(a, 1n+tp)
+      %Equal.sym(Bool, Nat.is_le(q, Nat.div(a, 1n+sp)), Nat.is_le(Nat.mul(q, 1n+sp), a), le_div_iff_mul_le(q, a, sp)) : {_ == True{} : Bool}
+      le_trans(Nat.mul(q, 1n+sp), Nat.mul(q, 1n+tp), a,
+        mul_le_mul_left(1n+sp, 1n+tp, q, st), div_mul_le_self(a, 1n+tp))
+
 # --- generated: _sym twins (tools/mathlib/twins.ts), do not edit ---
 
 # Zero is a right identity for addition: x + 0 = x, reversed to rewrite toward the simple side.

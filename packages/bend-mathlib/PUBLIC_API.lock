@@ -2455,6 +2455,12 @@
       "sha256": "a3d4d75fe96b86b2f8be9217723f5eb8e1625ac75b2f8b18c0b26f6f0d335226",
       "since": "0.7.0.0"
     },
+    "nat.div_antitone": {
+      "kind": "law",
+      "text": "for +a: Nat\nfor +s: Nat\nfor +t: Nat\nfor st: le(s, t)\nfor positive: lt(0n, s)\nle(Nat.div(a, t), Nat.div(a, s))",
+      "sha256": "0a905d1d0829c3ce01db3ff0db9a105c08ec6aa28903326861215e7fd633d75e",
+      "since": null
+    },
     "nat.div_eq_zero_of_le": {
       "kind": "law",
       "text": "for +a: Nat\nfor +b: Nat\nfor h: le(a, b)\n{Nat.div(a, 1n+b) == 0n : Nat}",
@@ -4831,6 +4837,12 @@
       "sha256": "19666de26dbcab309e5bd4310212088878a61912ef91b90e611a48974a7027d9",
       "since": "0.8.0.0"
     },
+    "u32.u32_div_antitone": {
+      "kind": "law",
+      "text": "for +a: U32\nfor +s: U32\nfor +t: U32\nfor st: {U32.is_le(s, t) == True{} : Bool}\nfor positive: {U32.is_lt(0, s) == True{} : Bool}\n{U32.is_le(U32.div(a, t), U32.div(a, s)) == True{} : Bool}",
+      "sha256": "ec558f4d0e4b401a51ea4380e8d45fbc9fe9e19d4f49ee318ff8c1aebaeb91ab",
+      "since": null
+    },
     "u32.u32_from_nat_to_nat": {
       "kind": "law",
       "text": "for a: U32\n{U32.from_nat(U32.to_nat(a)) == a : U32}",
@@ -4986,6 +4998,18 @@
       "text": "for a: U32\nfor b: U32\n{Nat.mod(Nat.add(U32.to_nat(a), Nat.sub(Nat.pow(2n, 32n), U32.to_nat(b))), Nat.pow(2n, 32n)) == U32.to_nat(U32.sub(a, b)) : Nat}",
       "sha256": "e6caf3ee80cf4248370bbf3f9d0e0bbcebd9f6ef734ab52bf85dd499009807ae",
       "since": "0.8.0.0"
+    },
+    "u32.u32_to_nat_div": {
+      "kind": "law",
+      "text": "for +a: U32\nfor +b: U32\n{U32.to_nat(U32.div(a, b)) == Nat.div(U32.to_nat(a), U32.to_nat(b)) : Nat}",
+      "sha256": "ccaf550f11eb41cfee245b21890c57b78e082baa571c2fb74b728bff9eba8ba7",
+      "since": null
+    },
+    "u32.u32_to_nat_div_sym": {
+      "kind": "law",
+      "text": "for +a: U32\nfor +b: U32\n{Nat.div(U32.to_nat(a), U32.to_nat(b)) == U32.to_nat(U32.div(a, b)) : Nat}",
+      "sha256": "cd912e3c326f63a1e387838ba0639dd097651c5ecced4dbdc5ef15fd161e0985",
+      "since": null
     },
     "u32.u32_to_nat_from_nat": {
       "kind": "law",

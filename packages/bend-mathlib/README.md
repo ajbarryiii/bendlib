@@ -5,6 +5,8 @@ Machine-checked lemmas for Bend 2, checked with `bend 2.0.39`.
 Rewriting: `%e : P` replaces the right side of `e` with its left side, so `name` expands the simple
 side into the compound one and `name_sym` simplifies the compound side.
 
+Rows marked `next` are proved in this repository but not yet published: the import lines above do not contain them yet.
+
 ## algebra
 
 ```python
@@ -649,6 +651,7 @@ import bend-mathlib@0.8.0.0/nat.bend as MNat
 | `double_inj(a, b, e)` | `∀ a: Nat, b: Nat, e: {Nat.double(a) == Nat.double(b) : Nat}. {a == b : Nat}` | Doubling is injective: double a = double b implies a = b. | 0.8.0.0 |
 | `double_ne_succ_double(a, b)` | `∀ a: Nat, b: Nat. {Nat.double(a) != 1n+Nat.double(b) : Nat}` | An even number is not odd: double a differs from 1 + double b. | 0.8.0.0 |
 | `two_pow_succ(n)` | `∀ n: Nat. {Nat.pow(2n, 1n+n) == Nat.double(Nat.pow(2n, n)) : Nat}` | Two to a successor power is double the power: 2^(n+1) = double (2^n). | 0.8.0.0 |
+| `div_antitone(a, s, t, st, positive)` | `∀ +a: Nat, +s: Nat, +t: Nat, st: le(s, t), positive: lt(0n, s). le(Nat.div(a, t), Nat.div(a, s))` | Increasing a positive divisor cannot increase the quotient: 0 < s <= t implies a / t <= a / s. | next |
 | `add_zero_sym(x)` | `∀ x: Nat. {x == Nat.add(x, 0n) : Nat}` | Zero is a right identity for addition: x + 0 = x, reversed to rewrite toward the simple side. | 0.1.0.0 |
 | `zero_add_sym(x)` | `∀ -x: Nat. {x == Nat.add(0n, x) : Nat}` | Zero is a left identity for addition: 0 + x = x, reversed to rewrite toward the simple side. | 0.1.0.0 |
 | `add_succ_sym(n, m)` | `∀ n: Nat, -m: Nat. {1n+Nat.add(n, m) == Nat.add(n, 1n+m) : Nat}` | Adding a successor on the right: n + (m + 1) = (n + m) + 1, reversed to rewrite toward the simple side. | 0.1.0.0 |
@@ -885,6 +888,8 @@ import bend-mathlib@0.8.0.0/u32.bend as MU32
 | `u32_to_nat_from_nat_mod(k)` | `∀ k: Nat. {U32.to_nat(U32.from_nat(k)) == Nat.mod(k, Nat.pow(2n, 32n)) : Nat}` | Converting any natural to U32 and back reduces it modulo 2^32: to_nat (from_nat k) = k % 2^32. | 0.8.0.0 |
 | `u32_min_to_nat(a, b)` | `∀ a: U32, b: U32. {U32.to_nat(U32.min(a, b)) == Nat.min(U32.to_nat(a), U32.to_nat(b)) : Nat}` | The U32 minimum is the minimum of the values: to_nat (min a b) = min (to_nat a) (to_nat b). | 0.8.0.0 |
 | `u32_max_to_nat(a, b)` | `∀ a: U32, b: U32. {U32.to_nat(U32.max(a, b)) == Nat.max(U32.to_nat(a), U32.to_nat(b)) : Nat}` | The U32 maximum is the maximum of the values: to_nat (max a b) = max (to_nat a) (to_nat b). | 0.8.0.0 |
+| `u32_to_nat_div(a, b)` | `∀ +a: U32, +b: U32. {U32.to_nat(U32.div(a, b)) == Nat.div(U32.to_nat(a), U32.to_nat(b)) : Nat}` | U32 division agrees with natural division, including the zero-divisor quotient of zero. | next |
+| `u32_div_antitone(a, s, t, st, positive)` | `∀ +a: U32, +s: U32, +t: U32, st: {U32.is_le(s, t) == True{} : Bool}, positive: {U32.is_lt(0, s) == True{} : Bool}. {U32.is_le(U32.div(a, t), U32.div(a, s)) == True{} : Bool}` | Increasing a positive U32 divisor cannot increase the quotient: 0 < s <= t implies a / t <= a / s. | next |
 | `word_to_nat_zero_sym(n)` | `∀ n: Nat. {0n == Word.to_nat(n, Word.zero(n)) : Nat}` | The zero word is the natural zero: to_nat (zero n) = 0, reversed to rewrite toward the simple side. | 0.8.0.0 |
 | `word_cmp_to_nat_sym(n, a, b)` | `∀ n: Nat, a: Word(n), b: Word(n). {Nat.cmp(Word.to_nat(n, a), Word.to_nat(n, b)) == Word.cmp(n, a, b) : Cmp}` | Comparing words compares their values: cmp a b = cmp (to_nat a) (to_nat b), reversed to rewrite toward the simple side. | 0.8.0.0 |
 | `word_not_add_sym(n, w)` | `∀ n: Nat, w: Word(n). {Nat.pow(2n, n) == 1n+Nat.add(Word.to_nat(n, Word.not(n, w)), Word.to_nat(n, w)) : Nat}` | One plus a word plus its complement is two to the width: 1 + to_nat (not w) + to_nat w = 2^n, reversed to rewrite toward the simple side. | 0.8.0.0 |
@@ -915,5 +920,6 @@ import bend-mathlib@0.8.0.0/u32.bend as MU32
 | `u32_to_nat_from_nat_mod_sym(k)` | `∀ k: Nat. {Nat.mod(k, Nat.pow(2n, 32n)) == U32.to_nat(U32.from_nat(k)) : Nat}` | Converting any natural to U32 and back reduces it modulo 2^32: to_nat (from_nat k) = k % 2^32, reversed to rewrite toward the simple side. | 0.8.0.0 |
 | `u32_min_to_nat_sym(a, b)` | `∀ a: U32, b: U32. {Nat.min(U32.to_nat(a), U32.to_nat(b)) == U32.to_nat(U32.min(a, b)) : Nat}` | The U32 minimum is the minimum of the values: to_nat (min a b) = min (to_nat a) (to_nat b), reversed to rewrite toward the simple side. | 0.8.0.0 |
 | `u32_max_to_nat_sym(a, b)` | `∀ a: U32, b: U32. {Nat.max(U32.to_nat(a), U32.to_nat(b)) == U32.to_nat(U32.max(a, b)) : Nat}` | The U32 maximum is the maximum of the values: to_nat (max a b) = max (to_nat a) (to_nat b), reversed to rewrite toward the simple side. | 0.8.0.0 |
+| `u32_to_nat_div_sym(a, b)` | `∀ +a: U32, +b: U32. {Nat.div(U32.to_nat(a), U32.to_nat(b)) == U32.to_nat(U32.div(a, b)) : Nat}` | U32 division agrees with natural division, including the zero-divisor quotient of zero, reversed to rewrite toward the simple side. | next |
 
-488 lemmas + 330 generated _sym twins, 6 predicates. Generated by `tools/mathlib/index.ts`.
+491 lemmas + 331 generated _sym twins, 6 predicates. Generated by `tools/mathlib/index.ts`.
